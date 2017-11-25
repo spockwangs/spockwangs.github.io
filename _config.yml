@@ -99,3 +99,7 @@ google_analytics_tracking_id:
 
 # Facebook Like
 facebook_like: false
+
+# Duoshuo comments
+duoshuo_comments: true
+duoshuo_short_name: xxx  # 多说账户
