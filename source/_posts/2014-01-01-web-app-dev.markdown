@@ -42,37 +42,37 @@ Javascript没有对模块提供直接的支持，更不用说维护模块之间�
 Douglas Crockford在"Javascript: The Good Parts"一书中提出的Module Pattern利
 用Javascript的闭包技术来模拟模块的概念，防止名字冲突和全局变量的使用。这解
 决了第一个问题。
+``` js
+var moduleName = function () {
+    // Define private variables and functions
+    var private = ...
 
-    var moduleName = function () {
-        // Define private variables and functions
-        var private = ...
-
-        // Return public interface.
-        return {
-            foo: ...
-        };
-    }();
-
+    // Return public interface.
+    return {
+        foo: ...
+    };
+}();
+```
 为了解决第二个问题[CommonJS](http://www.commonjs.org/)组织定义了
 [AMD规范](http://wiki.commonjs.org/wiki/Modules/AsynchronousDefinition)方便
 开发者显示指定模块之间的依赖关系，并在需要时加载依赖的模块。
 [RequireJS](http://requirejs.org/)是AMD规范的一个比较流行的实现。
 
 首先我们在`a.js`中定义模块`A`.
-
-    define(function () {
-        return {
-            color: "black",
-            size: 10
-        };
-    });
-
+``` js
+define(function () {
+    return {
+        color: "black",
+        size: 10
+    };
+});
+```
 然后定义模块`B`依赖模块`A`.
-
-    define(["a"], function (A) {
-        // ...
-    });
-
+``` js
+define(["a"], function (A) {
+    // ...
+});
+```
 当模块`B`执行时RequireJS保证模块`A`已被加载。具体细节可参考RequireJS官方文
 档。
 
@@ -80,11 +80,12 @@ Douglas Crockford在"Javascript: The Good Parts"一书中提出的Module Pattern
 
 最简单的脚本加载方式是放在`<head>`加载。
 
-    <head>
-      <script src="base.js" type="text/javascript"></script>
-      <script src="app.js" type="text/javascript"></script>
-    </head>
-
+``` html
+<head>
+  <script src="base.js" type="text/javascript"></script>
+  <script src="app.js" type="text/javascript"></script>
+</head>
+```
 其缺点是：
 
 1. 加载和解析是顺序是同步执行的，先下载`base.js`然后解析和执行，然后再下载
@@ -93,19 +94,21 @@ Douglas Crockford在"Javascript: The Good Parts"一书中提出的Module Pattern
 
 为了缓解这些问题，现在的普遍做法是将`<script>`放在`<body>`的底部。
 
-      <script src="base.js" type="text/javascript"></script>
-      <script src="app.js" type="text/javascript"></script>
-    </body>
-
+``` html
+  <script src="base.js" type="text/javascript"></script>
+  <script src="app.js" type="text/javascript"></script>
+</body>
+```
 但并不是所有的脚本都可以放在`<body>`的底部，比如有些逻辑要在页面渲染时执行，
 不过大多数脚本没有这样的要求。
 
 将脚本放在`<body>`底部仍然没有解决顺序下载的问题，一些浏览器厂商也意识到了
 这个问题并开始支持异步下载。HTML5也提供了标准的解决方案：
 
-    <script src="base.js" type="text/javascript" async></script>
-    <script src="app.js" type="text/javascript" async></script>
-
+``` html
+<script src="base.js" type="text/javascript" async></script>
+<script src="app.js" type="text/javascript" async></script>
+```
 标上`async`属性的脚本表明你没有在里面使用`document.write`之类的代码。浏览器
 将异步下载和执行这些脚本，并且不会阻止DOM树的渲染。但是这会导致另一个问题：
 由于是异步执行，`app.js`可能在`base.js`之前执行，如果它们之间有依赖关系这将
@@ -190,15 +193,15 @@ View.
 这里有两个关键点：
 
 1. 在初始化时监听事件
-
-    var View = Backbone.View.extend({
-        initialize: function () {
-            this.$el.on('click', '#id', function () {
-                // ...
-            });
-        }
-    });
-
+``` js
+var View = Backbone.View.extend({
+    initialize: function () {
+        this.$el.on('click', '#id', function () {
+            // ...
+        });
+    }
+});
+```
 除了一些特殊情况外（请看下文），所有UI事件都应该在View初始化时初始化，防止同
 一个事件被绑定多次。即使有些事件是动态监听的（有时候需要监听，有时候有不需要
 监听，比如有些按钮有时候是有效的，有时候又无效），也需要在初始化时监听，然后
@@ -247,15 +250,15 @@ View.
 Javascript是一个动态语言，许多检查都是在运行时执行的，所以大多数错误只有执
 行到的时候才能检查到，只能在发布前通过大量测试来发现。即使这样仍可能有少数
 没有执行到的路径有错误，这只能通过线上错误报告来发现了。
-
-    window.onerror = function (errorMsg, fileLoc, linenumber) {
-        var s = 'url: ' + document.URL + '\nfile:  ' + fileLoc
-            + '\nline number: ' + linenumber
-            + '\nmessage: ' + errorMsg;
-        Log.error(s);       // 发给服务器统计监控
-        console.log(s);
-    };
-
+``` js
+window.onerror = function (errorMsg, fileLoc, linenumber) {
+    var s = 'url: ' + document.URL + '\nfile:  ' + fileLoc
+        + '\nline number: ' + linenumber
+        + '\nmessage: ' + errorMsg;
+    Log.error(s);       // 发给服务器统计监控
+    console.log(s);
+};
+```
 通常线上的Javascript都是经过了合并和压缩的，上报的文件名和行号基本上没法对
 应到源代码，对查错帮助不是很大。不过最新版的Chrome支持在`onerror`的回调函数
 中获取出错时的栈轨迹：`window.event.error.stack`.
