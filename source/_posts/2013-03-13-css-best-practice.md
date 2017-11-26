@@ -8,9 +8,7 @@ categories:
 
 ## Use a reset styelsheet
 
-Reset规则可以消除不同浏览器的差异，比较流行的reset规则有[Meyer
-Reset](http://meyerweb.com/eric/tools/css/reset/index.html)和[Yahoo
-Reset](http://developer.yahoo.com/yui/reset/).
+Reset规则可以消除不同浏览器的差异，比较流行的reset规则有[Meyer Reset](http://meyerweb.com/eric/tools/css/reset/index.html)和[Yahoo Reset](http://developer.yahoo.com/yui/reset/).
 <!--more-->
 
 ## Categorize CSS Rules
