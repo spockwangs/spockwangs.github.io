@@ -101,5 +101,8 @@ google_analytics_tracking_id:
 facebook_like: false
 
 # Duoshuo comments
-duoshuo_comments: true
+duoshuo_comments: false
 duoshuo_short_name: xxx  # 多说账户
+
+# 友言评论
+youyan_comments: true

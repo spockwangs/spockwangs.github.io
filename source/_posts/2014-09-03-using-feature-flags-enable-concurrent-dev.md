@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 使用Feature Flags进行并行开发和持续集成
+comments: true
 categories:
 - programming practice
 - distributed system
