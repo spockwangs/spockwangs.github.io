@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 随机采样
+comments: true
 categories:
 - algorithm
 ---
@@ -8,7 +9,7 @@ categories:
 ## 问题描述
 
 从一个预先不知道其大小的集合中随机选出`K`个数字。
-
+<!--more-->
 ## 算法
 
 _Input:_ `K`，和一系列数字。

@@ -1,6 +1,7 @@
 ---
 layout: post
 title: FTP的主动和被动模式
+comments: true
 categories:
 - computer network
 ---
@@ -9,6 +10,7 @@ FTP是仅基于TCP的服务，不支持UDP。与众不同的是FTP使用2个端�
 一个命令端口（也可叫做控制端口）。通常来说这两个端口是21（命令端口）和20（数
 据端口）。但FTP工作方式的不同，数据端口并不总是20。这就是主动与被动FTP的最大
 不同之处。
+<!--more-->
 
 ## 主动FTP
 

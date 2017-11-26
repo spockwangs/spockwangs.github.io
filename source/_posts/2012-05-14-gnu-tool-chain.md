@@ -1,6 +1,7 @@
 ---
 layout: post
 title: GNU Tool Chain
+comments: true
 categories:
 - programming language
 - operating system

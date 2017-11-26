@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 用MySql实现事务型消息队列
+comments: true
 categories:
 - programming practice
 - database
@@ -15,6 +16,7 @@ categories:
 * FIFO顺序；
 * 支持多生产者；
 * 支持多消费者。每个消息只能被其中一个消费者处理。
+<!--more-->
 
 ## 第一次尝试
 

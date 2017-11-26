@@ -1,6 +1,7 @@
 ---
 layout: post
 title: How to support Unicode in C/C++
+comments: true
 categories:
 - programming language
 ---
@@ -14,6 +15,7 @@ converted to wide characters for internal use.  All the logic of the
 program is based on the internal encoding.  When characters are required to
 transmitted to outside (e.g. print to `stdout` or across the
 network) they are converted to appropriate encoding.
+<!--more-->
 
 ## Locale
 

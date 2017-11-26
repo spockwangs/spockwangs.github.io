@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Java Gotchas
+comments: true
 categories:
 - programming language
 ---

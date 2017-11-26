@@ -1,47 +1,41 @@
 ---
 layout: post
 title: C++ Idioms
+published: true
+comments: true
 categories:
 - programming practice
-status: publish
-type: post
-published: true
-meta:
-  _edit_last: '1'
-  _edit_lock: '1353842551'
-  _pingme: '1'
-  _encloseme: '1'
-  _wp_old_slug: ''
 ---
 
 ## Pimpl idiom
 
 **Declare the constructor and destructor in the header file and define them
   in the source file when using Pimpl idiom, even if they are empty.**
+<!--more-->
 
 Consider the following code.
+``` c++
+// pimpl.h
+class Impl;    // forward declaration
+class Pimpl {
+public:
+Pimpl();
 
-    // pimpl.h
-    class Impl;    // forward declaration
-    class Pimpl {
-    public:
-       Pimpl();
-       
-       // The destructor is not declared, so the compiler will generate one.
+// The destructor is not declared, so the compiler will generate one.
 
-    private:
-        boost::scoped_ptr<Impl> m_impl;
-    };
+private:
+boost::scoped_ptr<Impl> m_impl;
+};
 
-    // pimpl.cc
-    class Impl {
-         // ...
-    };
+// pimpl.cc
+class Impl {
+ // ...
+};
 
-    Pimpl::Pimpl()
-        : m_impl(new Impl)
-    {}
-
+Pimpl::Pimpl()
+: m_impl(new Impl)
+{}
+```
 If you do not declare the destructor the compiler will generate one in
 every translation unit that includes `impl.h`, which will call
 the destructor of member variables, that is, the destructor
@@ -89,20 +83,20 @@ recommended to pass it by value instead of passing it by reference and
 making a copy in the function body.
 
 Consider the following code.
+``` c++
+std::vector<std::string> 
+sorted(std::vector<std::string> names)
+{
+std::sort(names);
+return names;
+}
 
-    std::vector<std::string> 
-    sorted(std::vector<std::string> names)
-    {
-        std::sort(names);
-        return names;
-    }
- 
-    // names is an lvalue; a copy is required so we don't modify names
-    std::vector<std::string> sorted_names1 = sorted( names );
- 
-    // get_names() is an rvalue expression; we can omit the copy!
-    std::vector<std::string> sorted_names2 = sorted( get_names() );
+// names is an lvalue; a copy is required so we don't modify names
+std::vector<std::string> sorted_names1 = sorted( names );
 
+// get_names() is an rvalue expression; we can omit the copy!
+std::vector<std::string> sorted_names2 = sorted( get_names() );
+```
 If the argument passed is an lvalue a copy is required.  But if the
 argument is an rvalue the copy can be optimized out by the compiler.
 
@@ -116,26 +110,26 @@ Many modern C++ compilers provide the Return Value Optimization to elide
 the copy when returnning value. 
 
 Consider the following code.
+``` c++
+std::string getName()
+{
+std::string name;
 
-    std::string getName()
-    {
-        std::string name;
-        
-        // do stuff to `name`
-        
-        return name;
-    }
+// do stuff to `name`
 
-    std::string s = getName();
+return name;
+}
 
+std::string s = getName();
+```
 Actually the signature of `getName()` is translated by the compiler to
-
-    void getName(std::string *p)
-    {
-        // do stuff to `*p`
-        // not necessary to copy when returnning
-    }
-
+``` c++
+void getName(std::string *p)
+{
+    // do stuff to `*p`
+    // not necessary to copy when returnning
+}
+```
 The caller allocates space for the return value on the stack, and pass the
 address of the space to the callee. Then the callee construct the return
 value directly in that space, which elimiates a copy from inside to

@@ -8,7 +8,7 @@ categories:
 ---
 
 There are four types of type-cast in C++, which are preferred than the C-style cast.
-
+<!--more-->
 ## static_cast
 
 `static_cast` has following uses.

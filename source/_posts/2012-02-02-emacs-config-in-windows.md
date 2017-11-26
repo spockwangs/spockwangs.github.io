@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 在Windows上配置Emacs 23
+comments: true
 categories:
 - administration
 ---
@@ -10,6 +11,7 @@ categories:
 在Windows下，Emacs的配置文件存放在被Emacs称为HOME的目录下。默认情况下该目录
 是`C:/Users/<login name>/AppData/Roaming/`（Windows 7）。这个目录可以通
 过环境变量`HOME`来设置。
+<!--more-->
 
 ## 启用Emacs的服务器模式
 

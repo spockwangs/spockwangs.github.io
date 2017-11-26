@@ -1,11 +1,13 @@
 ---
 layout: post
 title: 配置Subversion
+comments: true
 categories:
 - Administration
 ---
 
 ## 配置Subversion服务器使用xinetd启动
+<!--more-->
 
 1.  建立/etc/xinetd.d/svn，内容如下：
 ```

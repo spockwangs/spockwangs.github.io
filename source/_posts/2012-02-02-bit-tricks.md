@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 比特操纵技巧
+comments: true
 categories:
 - programming practice
 ---
@@ -8,6 +9,7 @@ categories:
 ## 计算数据二进制表示中1的个数
 
 比如3（11<sub>2</sub>）有2个，4（100<sub>2</sub>）有1个，0（0<sub>2</sub>）有0个。
+<!--more-->
 
 最直接的方法当然是每次将其右移一位，若移出的比特为1则加1。它时间复杂度正比于数据宽度。还有一种更简单的方法如下所示：
 ``` c

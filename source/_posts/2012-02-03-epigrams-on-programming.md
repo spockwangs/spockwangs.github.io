@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Epigrams on Programming
+comments: true
 categories:
 - programming practice
 ---

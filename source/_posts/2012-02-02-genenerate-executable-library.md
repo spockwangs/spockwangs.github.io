@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 生成可执行的共享库
+comments: true
 categories:
 - programming language
 ---
@@ -8,6 +9,7 @@ categories:
 Linux系统下共享对象文件和可执行文件的格式都是ELF格式，它们并没有什么本质 上
 的区别。共享对象文件也是可以执行的。例如Linux下动态链接器ld-linux.so就 是共
 享对象文件，它也可以像可执行文件一样执行；Glibc库函数也是一样。
+<!--more-->
 
 共享对象文件要执行有2个问题要解决：
 

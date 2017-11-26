@@ -1,7 +1,7 @@
 ---
 layout: post
 title: MySql Help
-type: post
+comments: true
 published: true
 categories:
 - database

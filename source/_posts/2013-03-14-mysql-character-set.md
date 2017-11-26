@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 关于Mysql客户端、连接和服务器字符集
+comments: true
 categories:
 - mysql
 - database
@@ -13,6 +14,7 @@ Mysql在客户端与服务器交互时涉及到几个字符集和collation的转
 *  客户端发给服务器的查询语句的字符集是什么？
    
    客户端发给服务器的语句的字符集由系统变量[character_set_client][character_set_client]定义。
+<!--more-->
 
 *  服务器收到查询语句后会转换成什么字符集？
 
@@ -36,34 +38,34 @@ Mysql在客户端与服务器交互时涉及到几个字符集和collation的转
 ## 如何设置字符集
 
 我们通常用`set names`语句设置连接相关的字符集。
-
-    mysql> set names 'charset_name' [collate 'collation_name']
-
+```
+mysql> set names 'charset_name' [collate 'collation_name']
+```
 等价于
-
-    mysql> set character_set_client = 'charset_name'
-    mysql> set character_set_results = 'charset_name'
-    mysql> set character_set_connection = 'charset_name'
-
+```
+mysql> set character_set_client = 'charset_name'
+mysql> set character_set_results = 'charset_name'
+mysql> set character_set_connection = 'charset_name'
+```
 ## 如何查看设置的字符集
 
 可以这样查看设置的系统变量
-
-    mysql> show variables like 'character_set%';
-    +--------------------------+---------------------------------------+
-    | Variable_name            | Value                                 |
-    +--------------------------+---------------------------------------+
-    | character_set_client     | latin1                                | 
-    | character_set_connection | latin1                                | 
-    | character_set_database   | latin1                                | 
-    | character_set_filesystem | binary                                | 
-    | character_set_results    | latin1                                | 
-    | character_set_server     | latin1                                | 
-    | character_set_system     | utf8                                  | 
-    | character_sets_dir       | /data/mysql_root/base/share/charsets/ | 
-    +--------------------------+---------------------------------------+
-    8 rows in set (0.00 sec)
-
+```
+mysql> show variables like 'character_set%';
++--------------------------+---------------------------------------+
+| Variable_name            | Value                                 |
++--------------------------+---------------------------------------+
+| character_set_client     | latin1                                | 
+| character_set_connection | latin1                                | 
+| character_set_database   | latin1                                | 
+| character_set_filesystem | binary                                | 
+| character_set_results    | latin1                                | 
+| character_set_server     | latin1                                | 
+| character_set_system     | utf8                                  | 
+| character_sets_dir       | /data/mysql_root/base/share/charsets/ | 
++--------------------------+---------------------------------------+
+8 rows in set (0.00 sec)
+```
 ## References
 
 *  [关于连接字符集](http://dev.mysql.com/doc/refman/5.5/en/charset-connection.html).

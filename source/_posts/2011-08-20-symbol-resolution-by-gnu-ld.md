@@ -15,6 +15,7 @@ asymbole resolution process is called by the link editor to determine
 whichsymbol is taken. The resolution of two symbols with the same
 namedepends on the symbol's attributes (its binding, defineness and
 size). See page 67 of [<a href="#gabi41">Gabi4</a>].
+<!--more-->
 
 *  **Global:** Global symbols are those whose binding is
 `STB_GLOBAL`. They are visible to all object files being

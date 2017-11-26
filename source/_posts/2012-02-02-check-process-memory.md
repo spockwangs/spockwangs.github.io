@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 查看进程的内存使用情况
+comments: true
 categories:
 - computer system
 - operating system
@@ -13,6 +14,7 @@ categories:
 *  sz：进程映像所占用的物理页面数量，也就是以物理页面为单位表示的虚拟内存大小；
 *  rss：进程当前所占用的物理内存大小，单位为kB；
 *  vsz：进程的虚拟内存大小，单位为kB，它等于sz乘于物理页面大小（x86平台通常为4kB）。
+<!--more-->
 
 假如我要查看程序`a.out`的内存使用情况，操作如下：
 ```

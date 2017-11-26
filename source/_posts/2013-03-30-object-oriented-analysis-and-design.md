@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 使用Booch方法进行面向对象分析与设计
+comments: true
 categories:
 - programming practice
 ---
@@ -14,6 +15,7 @@ Brian Kernighan在_[Software Tools][software_tools]_一书中表达了这样的�
 大的复杂性，例如，跟软件密切联系的硬件领域，生物，人体构造，物质结构和社会
 组织等。自然界到处充斥着极其复杂的对象，但是软件的复杂性与自然界的复杂性不
 一样，正如Brooks所说：
+<!--more-->
 
 > Einstein argued that there must be simplified explanations of nature,
 > because God is not capricious or arbitrary. No such faith comforts the

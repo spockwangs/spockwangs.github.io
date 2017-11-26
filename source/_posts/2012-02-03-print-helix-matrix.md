@@ -1,6 +1,7 @@
 ---
 layout: post
 title: 打印螺旋矩阵
+comments: true
 categories:
 - programming practice
 ---

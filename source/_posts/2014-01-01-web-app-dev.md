@@ -1,6 +1,7 @@
 ---
 layout: post
 title: Web应用开发中的几个问题
+commens: true
 categories:
 - programming practice
 ---
@@ -16,6 +17,7 @@ categories:
 * 响应式设计(Responsive Design)使得Web应用可以跨平台，同一份代码自适应各种
   屏幕大小
 * 即使最终不采用Web应用方案，也很适合开发原型
+<!--more-->
 
 当然，Web应用也不是没有缺点。由于不同平台和厂商的浏览器并不完全一样，跨平台
 也有一些兼容成本。另外，Web应用的性能不如native应用，交互有时候不是很流畅，

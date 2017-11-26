@@ -1,6 +1,7 @@
 ---
 layout: post
 title: C++的new和delete运算符与内存分配函数和释放函数
+comments: true
 categories:
 - programming language
 ---
@@ -15,6 +16,7 @@ int *p = operator new (sizeof(int));
 ```
 编译顺利通过。一时不得其解。前一句代码显然是调用new运算符；后一句看起来也像
 是调用`new`运算符，毕竟其它运算符可以这样调用。
+<!--more-->
 
 在仔细查看了C++标准后，我才发现这两句代码实际上是不一样的。前一句是调用`new`运
 算符，但后一句是直接调用内存分配函数。本文就是要澄清这两者之间的区别。
