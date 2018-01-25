@@ -6,7 +6,7 @@ comments: true
 categories: 
 ---
 
-用Tensorflow解决机器学习的问题时通常是用Python API构造模型并训练模型参数，然后将模型序列化到文件中。部署到线上时使用C++ API加载模型对输入进行预测。Tensorflow还专门提供了Serving模块来优化线上部署，除了进行预测外还提供了对模型的版本管理和模型热更新。但是为了更快地训练模型，缩短模型更新周期，就必须支持线上实时训练，也就是说必须支持用C++ API训练模型。但是C++ API目前还不完善，还不方便构造模型，所以仍然使用Python API构造模型，并导出给C++ API加载训练。本文介绍使用Tensorflow C++ API训练模型的两种部署方法。
+用Tensorflow解决机器学习的问题时通常是用Python API构造模型并训练模型参数，然后将模型序列化到文件中。部署到线上时使用C++ API加载模型对输入进行预测。Tensorflow还专门提供了Serving模块来优化线上部署，除了进行预测外还提供了对模型的版本管理和模型热更新。但是为了更快地训练模型，缩短模型更新周期，就必须支持线上实时训练，也就是说必须支持用C++ API训练模型。但是C++ API目前还不完善，还不方便构造模型，所以仍然使用Python API构造模型，并导出给C++ API加载训练。
 <!--more-->
 
 ## 准备
@@ -15,13 +15,13 @@ categories:
 2. 安装Tensorflow for Python.
 3. 下载Tensorflow源代码
 
-   ```shell
+   ``` shell
    $ git clone https://github.com/tensorflow/tensorflow.git
    ```
 4. 用Python API构造模型，我们以MNIST的softmax回归模型为例，代码如下：
 
-   ```python
-   import tensorflow as tf
+``` python create_model.py
+import tensorflow as tf
 import getopt
 import sys
 import exceptions
@@ -91,27 +91,46 @@ if __name__ == '__main__':
     main()
 ```
 
+创建模型并导出到目录models.
+```
+$ create_model.py --export_dir=models
+```
+
 ## 编译C++项目
 
-有两种方法编译C++项目，一种是把C++项目嵌入到Tensorflow中去编译，一种是独立编译。
+首先编译Tensorflow的C++共享库`libtensorflow_cc.so`.
+```
+$ cd tensorflow              # 进入tensorflow源代码目录
+$ ./configure
+$ bazel build --config=opt //tensorflow:libtensorflow_cc.so
+```
 
-## 将C++项目嵌入到Tensorflow编译
+下载并编译Tensorflow依赖的外部库。
+```
+$ cd tensorflow/contrib/makefile
+$ ./build_all_linux.sh
+```
 
-首先下载Tensorflow源代码，然后把C++项目的代码放到`tensorflow/tensorflow/<project name>`下，然后在这个目录下新建`BUILD`文件，代码目录结构如下：
+安装头文件和共享库。
+```
+$ cp tensorflow
+$ find tensorflow/core -name '*.h' | xargs -i cp --parents '{}' /usr/local/include/tf
+$ cp -r bazel-genfiles/* /usr/local/include/tf
+$ cp -r tensorflow/contrib/makefile/gen/protobuf/include/* /usr/local/include/tf
+$ cp -r tensorflow/contrib/makefile/downloads/eigen/* /usr/local/include/tf
+$ cp -r tensorflow/contrib/makefile/downloads/nsync/public/* /usr/local/include/tf
+$ cp -r third_party /usr/local/include/tf
+$ cp tensorflow/bazel-bin/tensorflow/libtensorflow_cc.so /usr/local/lib
+$ cp tensorflow/bazel-bin/tensorflow/libtensorflow_framework.so /usr/local/lib
+```
 
-- tensorflow/tensorflow/<project name>
-- tensorflow/tensorflow/<project name>/xxx.cc
-- tensorflow/tensorflow/<project name>/BUILD
-
-我们的项目很简单，只有一个文件，加载模型的pb文件进行训练，代码如下：
-
-```c++
+我们的C++训练代码如下。
+```c++ train_model.cpp
 #include <arpa/inet.h>
 #include <string>
 #include <vector>
 #include <fstream>
 #include "tensorflow/core/public/session.h"
-#include "tensorflow/core/platform/env.h"
 
 using namespace std;
 
@@ -304,26 +323,24 @@ int main(int argc, char* argv[])
 }
 ```
 
-BUILD文件如下：
-
+编译训练代码。
 ```
-cc_binary(
-    name = "train_mnist_softmax_model",
-    srcs = ["train_mnist_softmax_model.cpp"],
-    deps = [
-        "//tensorflow/core:tensorflow",
-    ]
-)
+$ g++ train_model.cpp -o train_model -I/usr/local/include/tf -ltensorflow_cc -ltensorflow_framework
 ```
 
-运行时需要MNIST的数据文件，从http://yann.lecun.com/exdb/mnist/下载并解压到目录`mnist_data`：
-
-- mnist_data/t10k-images-idx3-ubyte
-- mnist_data/t10k-labels-idx1-ubyte
-- mnist_data/train-images-idx3-ubyte
-- mnist_data/train-labels-idx1-ubyte
-
-然后运行训练：
-
-```shell
-$ tensorflow/tensorflow
+下载[MNIST数据](http://yann.lecun.com/exdb/mnist/)到目录mnist_data并解压，然后运行训练代码。
+```
+$ ls mnist_data
+t10k-images-idx3-ubyte
+t10k-labels-idx1-ubyte
+train-images-idx3-ubyte
+train-labels-idx1-ubyte
+$ ./train_model mnist_data models/mnist_graph.pb
+loading data from mnist_data ... 
+loading data ... done.
+...
+training ... done.
+testing ... 
+Accuracy: 0.9012
+testing ... done.
+```
