@@ -18,48 +18,49 @@ Tensorflow Serving的[官方文档](https://www.tensorflow.org/serving/setup?hl=
 
 ## 编译Tensorflow Serving
 
-1. 下载Tensorflow Serving源代码
+### 下载Tensorflow Serving源代码
+```
+$ git clone --recurse-submodules https://github.com/tensorflow/serving
+```
 
-    ``` shell
-    $ git clone --recurse-submodules https://github.com/tensorflow/serving
-    ```
-    注意`--recurse-submodules`是为了下载子模块`tensorflow`和`tf_models`.
-    以下命令都在源代码根目录下执行。
+注意`--recurse-submodules`是为了下载子模块`tensorflow`和`tf_models`.
+以下命令都在源代码根目录下执行。
 
-2. 配置Tensorflow
+### 配置Tensorflow
 
-    ``` shell
-    $ cd tensorflow
-    $ ./configure
-    $ cd ..
-    ```
-    可参考https://www.tensorflow.org/install/install_sources?hl=zh-cn#configure_the_installation
+```
+$ cd tensorflow
+$ ./configure
+$ cd ..
+```
+可参考https://www.tensorflow.org/install/install_sources?hl=zh-cn#configure_the_installation
     
-3. 编译Tensorflow Serving
+### 编译Tensorflow Serving
 
-    ```shell
-    $ bazel clean
-    $ bazel build -c opt --incompatible_load_argument_is_label=false //tensorflow_serving/model_servers:tensorflow_model_server
-    ```
-    选项`--incompatible_load_argument_is_label=false`是为了兼容bazel 0.9版的问题。
+```
+$ bazel clean
+$ bazel build -c opt --incompatible_load_argument_is_label=false //tensorflow_serving/model_servers:tensorflow_model_server
+```
+选项`--incompatible_load_argument_is_label=false`是为了兼容bazel 0.9版的问题。
 
-4. 打包编译时生成的中间对象文件生成静态库
+### 打包编译时生成的中间对象文件生成静态库
 
-    ``` shell
-    $ find -L bazel-out/k8-opt/ -name '*.o' | grep -v '/main\.o$\|\.grpc\.pb\.o$\|/curl/\|/grpc/\|/cloud/\|/hadoop/' | xargs -i ar qv libtensorflow_serving.a '{}'
-    ```
-    注意：
-    - 要把上一步编译生成部分不需要的对象文件剔除掉。
-      - main函数
-      - curl, grpc, cloud, hadoop等不需要的模块
-      - 编译环境中已经有的模块（比如ssl, protobuf, snappy等）也可以剔除掉，减小库的尺寸
-    - ar是用选项`q`来添加对象文件，因为可能会有重名的对象文件。
+```
+$ find -L bazel-out/k8-opt/ -name '*.o' | grep -v '/main\.o$\|\.grpc\.pb\.o$\|/curl/\|/grpc/\|/cloud/\|/hadoop/' | xargs -i ar qv libtensorflow_serving.a '{}'
+```
+注意：
+
+* 要把上一步编译生成部分不需要的对象文件剔除掉。
+  * main函数
+  * curl, grpc, cloud, hadoop等不需要的模块
+  * 编译环境中已经有的模块（比如ssl, protobuf, snappy等）也可以剔除掉，减小库的尺寸
+* ar是用选项`q`来添加对象文件，因为可能会有重名的对象文件。
 
 ## 训练并导出模型
 
 以MNIST softmax模型为例，训练模型并导出到目录`models`.
 
-```shell
+```
 $ python2 serving/tensorflow_serving/example/mnist_saved_model.py models
 ```
 
@@ -278,13 +279,13 @@ int main()
 ```
 
 编译代码：
-``` shell
+```
 $ g++ -o mnist_serving mnist_serving.cpp -Wl,-whole-archive libtensorflow_serving.a -Wl,-no-whole-archive -I serving -I serving/tensorflow -I serving/bazel-out/k8-opt/genfiles/external/org_tensorflow/ -I serving/bazel-serving/external/nsync/public/ -I serving/bazel-serving/external/protobuf_archive/src/ -I serving/bazel-out/k8-opt/genfiles/ -std=c++11 -ldl -lpthread
 ```
 注意：由于Tensorflow采用注册机制来实现反射，所以必须使用链接选项`-whole-archive`强制链接整个静态库。
 
 下载MNIST数据到目录`mnist_data`并解压，然后运行查看预测结果。
-``` shell
+```
 $ ls mnist_data
 t10k-images-idx3-ubyte  t10k-labels-idx1-ubyte  train-images-idx3-ubyte  train-labels-idx1-ubyte
 $ ./mnist_serving

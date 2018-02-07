@@ -17,7 +17,7 @@ categories:
 2. 安装Tensorflow for Python.
 3. 下载Tensorflow源代码
 
-   ``` shell
+   ```
    $ git clone https://github.com/tensorflow/tensorflow.git
    ```
 4. 用Python API构造模型，我们以MNIST的softmax回归模型为例，代码如下：
@@ -349,12 +349,13 @@ testing ... done.
 
 ## 第二种方法：编译静态库
 
-``` shell
+```
 $ cd tensorflow/contrib/makefile
 $ ./build_all_linux.sh
 ```
+
 它的原理是利用bazel获取Tensorflow依赖的文件，然后编译链接成静态库。编译的Tensorflow静态库在`gen/lib/libtensorflow-core.a`. 同样使用上述C++代码，编译训练代码。
-``` shell
+```
 $ cd tensorflow/contrib/makefile
 $ g++ -std=c++11 train_model.cpp -o train_model \
 -I ../../.. \
@@ -373,7 +374,7 @@ gen/protobuf-host/lib/libprotobuf.a -lz -lm -ldl -lpthread -lstdc++
 ```
 
 运行模型：
-``` shell
+```
 $ ./train_model mnist_data models/mnist_graph.pb
 ```
 如果运行时报错说有些操作没有注册，这需要将相应的操作源代码文件（在`tensorflow/core/kernels/`下）放到`tf_op_files.txt`中重新编译。
