@@ -7,6 +7,8 @@ categories:
 ---
 
 用Tensorflow解决机器学习的问题时通常是用Python API构造模型并训练模型参数，然后将模型序列化到文件中。部署到线上时使用C++ API加载模型对输入进行预测。Tensorflow还专门提供了Serving模块来优化线上部署，除了进行预测外还提供了对模型的版本管理和模型热更新。但是为了更快地训练模型，缩短模型更新周期，就必须支持线上实时训练，也就是说必须支持用C++ API训练模型。但是C++ API目前还不完善，还不方便构造模型，所以仍然使用Python API构造模型，并导出给C++ API加载训练。
+
+本文给出两种方法来编译C++库，一种是共享库，一种是静态库。
 <!--more-->
 
 ## 准备
@@ -96,7 +98,7 @@ if __name__ == '__main__':
 $ create_model.py --export_dir=models
 ```
 
-## 编译C++项目
+## 第一种方法：编译共享库
 
 首先编译Tensorflow的C++共享库`libtensorflow_cc.so`.
 ```
@@ -344,3 +346,34 @@ testing ...
 Accuracy: 0.9012
 testing ... done.
 ```
+
+## 第二种方法：编译静态库
+
+``` shell
+$ cd tensorflow/contrib/makefile
+$ ./build_all_linux.sh
+```
+它的原理是利用bazel获取Tensorflow依赖的文件，然后编译链接成静态库。编译的Tensorflow静态库在`gen/lib/libtensorflow-core.a`. 同样使用上述C++代码，编译训练代码。
+``` shell
+$ cd tensorflow/contrib/makefile
+$ g++ -std=c++11 train_model.cpp -o train_model \
+-I ../../.. \
+-I downloads/ \ 
+-I downloads/eigen/ \
+-I downloads/gemmlowp/ \
+-I downloads/nsync/public/ \
+-I downloads/fft2d/ 
+-I gen/proto/ 
+-I gen/proto_text/ 
+-I gen/protobuf-host/include/ \
+-Wl,--allow-multiple-definition \
+-Wl,--whole-archive gen/lib/libtensorflow-core.a -Wl,--no-whole-archive \
+downloads/nsync/builds/default.linux.c++11/nsync.a \
+gen/protobuf-host/lib/libprotobuf.a -lz -lm -ldl -lpthread -lstdc++
+```
+
+运行模型：
+``` shell
+$ ./train_model mnist_data models/mnist_graph.pb
+```
+如果运行时报错说有些操作没有注册，这需要将相应的操作源代码文件（在`tensorflow/core/kernels/`下）放到`tf_op_files.txt`中重新编译。
