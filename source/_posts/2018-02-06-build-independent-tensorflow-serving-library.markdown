@@ -26,6 +26,21 @@ $ git clone --recurse-submodules https://github.com/tensorflow/serving
 注意`--recurse-submodules`是为了下载子模块`tensorflow`和`tf_models`.
 以下命令都在源代码根目录下执行。
 
+### 支持GPU
+
+不需要支持GPU可跳过该步骤。
+
+支持GPU需要安装CUDA，而这需要一些先决条件，可参考[官方手
+册](http://docs.nvidia.com/cuda/cuda-installation-guide-linux/#axzz4RD7GVh1d).
+
+安装完后记录以下信息，配置Tensorflow时会用到：
+- CUDA的安装目录，一般是`/usr/local/cuda`
+- CUDA的版本，查看文件`/usr/local/cuda/version.txt`
+- cuDNN的版本
+```
+cat /usr/local/cuda/include/cudnn.h | grep CUDNN_MAJOR -A 2
+```
+
 ### 配置Tensorflow
 
 ```
@@ -34,6 +49,7 @@ $ ./configure
 $ cd ..
 ```
 可参考https://www.tensorflow.org/install/install_sources?hl=zh-cn#configure_the_installation
+
     
 ### 编译Tensorflow Serving
 
