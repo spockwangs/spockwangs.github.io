@@ -39,7 +39,9 @@ $ cd ..
 
 ```
 $ bazel clean
-$ bazel build -c opt --incompatible_load_argument_is_label=false //tensorflow_serving/model_servers:tensorflow_model_server
+$ bazel build -c opt --incompatible_load_argument_is_label=false \
+    --cxxopt=-march=native --copt=-march=native \
+    //tensorflow_serving/model_servers:tensorflow_model_server
 ```
 选项`--incompatible_load_argument_is_label=false`是为了兼容bazel 0.9版的问题。
 
