@@ -30,10 +30,10 @@ $ git clone --recurse-submodules https://github.com/tensorflow/serving
 
 不需要支持GPU可跳过该步骤。
 
-支持GPU需要安装CUDA，而这需要一些先决条件，可参考[官方手
-册](http://docs.nvidia.com/cuda/cuda-installation-guide-linux/#axzz4RD7GVh1d).
+支持GPU需要安装CUDA，而这需要一些先决条件，可参考[官方手册](http://docs.nvidia.com/cuda/cuda-installation-guide-linux/#axzz4RD7GVh1d).
 
 安装完后记录以下信息，配置Tensorflow时会用到：
+
 - CUDA的安装目录，一般是`/usr/local/cuda`
 - CUDA的版本，查看文件`/usr/local/cuda/version.txt`
 - cuDNN的版本
