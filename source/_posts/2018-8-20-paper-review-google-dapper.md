@@ -9,6 +9,8 @@ categories:
 
 本文对Google的论文"[Dapper, a Large-Scale Distributed Systems Tracing Infrastructure](https://static.googleusercontent.com/media/research.google.com/zh-CN//archive/papers/dapper-2010-1.pdf)"的总结，这篇论文描述了Google的分布式跟踪一系统Dapper.
 
+<!-- more -->
+
 # Introduction
 
 现代的互联网服务通常都是实现为复杂的大规模分布式系统，由许多分布在不同机器上的模块组成，这些模块可能
@@ -112,8 +114,8 @@ Dapper进程也会消耗少量的网络带宽（不到0.01%）。
 计跟踪频率。
 
 上述的采样是为了减小生成跟踪数据时对应用程序产生影响。Dapper还需要控制写入存储的数据量，以减小成本和
-降低对BigTable的写入带宽。所以还需要第二轮采样，在搜集跟踪数据时计算trace id的hash值`z`(`0 \le z \le
-1`)，如果小于设置的采样比例就写入Bigtable，否则就丢弃。由于在不同的机器上一次请求的trace id是相同的，
+降低对BigTable的写入带宽。所以还需要第二轮采样，在搜集跟踪数据时计算trace id的hash值`z`($0 \leq z \leq
+1$)，如果小于设置的采样比例就写入Bigtable，否则就丢弃。由于在不同的机器上一次请求的trace id是相同的，
 这种方法能保证要么保留一个trace的所有数据，要么全部丢弃，不会只保留一部分的情况。
 
 # Dapper工具设计
