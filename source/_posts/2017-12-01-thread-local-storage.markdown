@@ -31,7 +31,7 @@ POSIX线程库提供了如下API管理TLS：
 
 下面是一个简单的例子。
 
-~~~c++
+~~~ c++
 #include <pthread.h>
 #include <thread>
 #include <cassert>
@@ -85,7 +85,8 @@ int main()
 # 显示TLS的实现
 
 在Linux中每个进程有一个全局的数组管理TLS key，定义类似如下：
-~~~ cpp
+
+~~~cpp
 struct pthread_key_struct {
     uintptr_t seq;
     void (*destructor)(void*);

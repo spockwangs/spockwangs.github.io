@@ -7,7 +7,7 @@ categories:
 - distributed system
 ---
 
-本文对Google的论文"[Dapper, a Large-Scale Distributed Systems Tracing Infrastructure](https://static.googleusercontent.com/media/research.google.com/zh-CN//archive/papers/dapper-2010-1.pdf)"的总结，这篇论文描述了Google的分布式跟踪一系统Dapper.
+本文对Google的论文"[Dapper, a Large-Scale Distributed Systems Tracing Infrastructure](https://static.googleusercontent.com/media/research.google.com/zh-CN//archive/papers/dapper-2010-1.pdf)"的总结，这篇论文描述了Google的分布式跟踪系统Dapper.
 
 <!-- more -->
 
@@ -23,8 +23,6 @@ Dapper就是Google开发的这样一个分布式系统跟踪工具。
 整体的耗时只能知道存在性能问题，但是无法知道是哪个服务导致的，也不知道原因。对于一个搜索查询，工程师
 并不知道有哪些服务在处理，因为系统在不断增加新服务。而且有很多服务是不同团队负责的，工程师无法知道每
 个服务的内部细节。很多服务会共享机器，所以性能问题也有可能是同机部署的其它服务导致的。
-
-
 
 根据上述例子我们可以发现分布式跟踪系统在空间上必须无所不在，在时间上持续监控。这就导致如下三个需求：
 - 低开销：跟踪系统必须对服务有几乎可忽略的影响。
