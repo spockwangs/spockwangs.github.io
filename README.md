@@ -29,12 +29,19 @@ $ rake preview
 
 4. 预览OK后发布至Github
 ```
-$ rake deploy
+$ rake generate
+$ rm -rf _deploy/*
+$ cp -r public/* _deploy
+$ git co master
+$ cp -r _deploy/* .
+$ git ci -a -m xxx
+$ git push
 ```
-这会把生成好的文件自动提交到master分支，并push给Github.
+这会把生成好的文件复制到master分支并push给Github.
 
 5. 最后把本地编辑的源文件提交到Github
 ```
+$ git co source
 $ git commit -a -m "xxx"
 $ git push
 ```
