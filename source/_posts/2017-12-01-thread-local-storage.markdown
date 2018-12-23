@@ -31,7 +31,7 @@ POSIX线程库提供了如下API管理TLS：
 
 下面是一个简单的例子。
 
-``` C++
+~~~c++
 #include <pthread.h>
 #include <thread>
 #include <cassert>
@@ -71,7 +71,7 @@ int main()
     assert(err == 0);
     return 0;
 }
-```
+~~~
 
 有几个值得注意的地方：
 
@@ -85,38 +85,38 @@ int main()
 # 显示TLS的实现
 
 在Linux中每个进程有一个全局的数组管理TLS key，定义类似如下：
-``` C++
+~~~ cpp
 struct pthread_key_struct {
     uintptr_t seq;
     void (*destructor)(void*);
 } __pthread_keys[PTHREAD_KEYS_MAX];
-```
+~~~
 
 每个元素用于存储key的序列号（用于判断key是否有效，下面解释）和其对应的析构函数。序列号初始值为0.
 `pthread_create_key()`会从该数组中找到一个还未分配的元素，将其序列号加1，记上析构函数地址，并将其下标
 作为TLS key返回。那么如何判断一个key是否已分配呢？
 
-``` C++
+~~~ C++
 #define KEY_UNUSED(seq) (((seq) & 1) == 0)
-```
+~~~
 若序列号为偶数则表示未分配，分配时将其加1变成奇数即可。这个操作采用原子CAS来完成，以保证线程安全。在
 `pthread_key_delete()`时也会将序列号加1，表示可以继续使用，通过序列号机制来保证回收的key不会被复用
 （复用的key会导致线程在退出时可能会调用错误的析构函数）。但是一直加1会导致序列号回绕，还是会复用key。
 所以创建key时会检查是否有回绕风险，如果有则创建失败。
 
-``` C++
+~~~ C++
 #define KEY_USABLE(seq) (((uintptr_t)(seq)) < ((uintptr_t) ((seq) + 2)))
-```
+~~~
 
 每个线程都有一个自己的线程控制块TCB（管理寄存器、线程栈等），里面有一个TLS数组(我的电脑上是32个元素）
 用于存放线程私有变量。TLS数组的每个元素定义类似如下：
 
-``` C++
+~~~ C++
 struct pthread_key_data {
     uintptr_t seq;
     void* data;
 };
-```
+~~~
 上面提到过`pthread_key_create()`返回的TLS key其实是`__pthread_keys`数组的下标。
 `pthread_setspecific()`根据TLS key定位TLS数组的一个元素，并设置其序列号seq和数据指针。
 如果这个数组不够用，则会再动态分配一个二级数组（在我的电脑上是一个32x32的稀疏数组）。
@@ -136,7 +136,7 @@ key对应的TLS变量指向一个`map`，这样可以在该`map`中存放无数�
 相比于上面显示TLS需要动态调用API构造线程私有变量，隐式TLS更加方便，采用编程语言提供的关键字声明即可。
 下面是采用C++11的关键字`thread_local`重写上面的程序。
 
-``` C++
+~~~ C++
 #include <thread>
 #include <cassert>
 #include <memory>
@@ -154,7 +154,7 @@ int main()
     assert(tls_int_ptr == nullptr);
     return 0;
 }
-```
+~~~
 
 `thread_local`声明的变量在线程启动时构造，并在线程退出时析构。而且不像POSIX的TLS，没有数量限制。但是
 其析构的时机没法动态控制。
@@ -164,23 +164,23 @@ int main()
 根据C++11标准，`thread_local`变量必须是静态变量（名字空间变量、函数静态变量或者类的静态成员变量），不
 能是类的非静态成员。例如，下面的代码是非法的:
 
-``` C++
+~~~ C++
 class C {
     int a;
     thread_local int b;
 };
-```
+~~~
 必须如下声明`b`是静态成员变量：
 
-``` C++
+~~~ C++
 class C {
     int a;
     thread_local static int b;
 };
-```
+~~~
 这有时候确实不方便，因为我们希望每个`C`对象都有自己的成员副本`b`，不过这可以用下面的方法规避这个问题：
 
-``` C++
+~~~ C++
 class C {
     int GetBPerThread()
     {
@@ -190,7 +190,7 @@ class C {
     int a;
     thread_local static std::map<void*, int> b_map;
 };
-```
+~~~
 
 既然可以规避，那为啥标准不直接支持呢？这是因为TLS变量的内存布局与类的非静态成员不兼容导致的。假设
 `b`是一个非静态成员，那么其内存位置必然与`a`是相邻的。但是`a`是全局唯一的（对于某个C对象来讲它
@@ -250,7 +250,7 @@ TLS块在线程第一次访问时分配，称为*动态模型*。对于静态模
 
 对于延迟分配的TLS，由于其偏移值在启动时未知，必须借助于`__tls_get_addr()`获取，定义类似如下：
 
-``` C
+~~~ C
 struct tls_index {
     size_t module_id;
     size_t offset;
@@ -274,7 +274,7 @@ void* __tls_get_addr(struct tls_index* ti)
 
     return tls_block + ti->offset;
 }
-```
+~~~
 `module_id`是模块ID，由动态链接器在加载模块时分配，从1开始（exec的模块ID固定是1）。
 
 当动态加载或卸载一个模块时，动态链接器维护的`dl_tls_generation`会加1，表示模块信息有了变化。由于每个线
@@ -320,7 +320,7 @@ void* __tls_get_addr(struct tls_index* ti)
 程分配自己的私有资源以满足大部分需求，只有在必要的时候才与其它线程通信。如下的程序实现了并发统计，在
 线程结束后由主线程汇总打印。
 
-``` C++
+~~~ C++
 #include <iostream>
 #include <thread>
 #include <ctime>
@@ -351,7 +351,7 @@ int main()
     std::cout << "total=" << total << std::endl;
     return 0;
 }
-```
+~~~
 
 主线程分配了一个数组，每个元素对应一个子线程，防止线程竞争。这样也方便了子线程将数据传回给主线程。
 如果采用线程私有变量则比较麻烦，必须借助其它全局变量来通信。所以说为了避免竞争并不一定需要线程私有变量。

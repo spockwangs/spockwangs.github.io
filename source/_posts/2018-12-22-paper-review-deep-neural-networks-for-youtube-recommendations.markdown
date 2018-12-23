@@ -37,9 +37,8 @@ categories: Machine Learning
 层的神经网络，模型的迭代是在此基础上可以增加深度和宽度增加模型的表达能力。
 
 召回问题可以看作是一个多分类问题，给定用户$U$和上下文$C$预测观看视频库$V$中某个视频$v_i$的概率:
-$$
-P(i|U, C) = \frac{e^{v_i^Tu}}{\sum_{j\in V}e^{v_j^Tu}}
-$$
+
+$$P(i|U,C) = \frac{\exp(v_i^Tu)}{\sum_{j\in V}\exp(v_j^Tu)}$$
 
 其中$u\in\mathbb{R}^N$(论文中$N=256$)是描述用户和上下文的向量，$v\in\mathbb{R}^N$是描述视频的向量。
 这个模型的目标就是从用户的特征和上下文学习到用户的向量表达用于区分对不同视频的偏好。剩下的问题就是如
@@ -100,15 +99,22 @@ $$
 后的每个取值的频率都相等）。另外，连续特征在归一化后还会取起平方和平方根以学习非线性规律。
 
 为了预测观看视频的时长，模型的目标是加权的逻辑回归，即在计算逻辑回归的交叉熵损失函数时，正样本用观看时长加权，而负样本使用1加权，则其损失函数为：
+
 $$
 \begin{align}
-loss = -T_i \log \sigma(z)，正样本，其中T_i表示观看时长 \\
-loss = -\log(1-\sigma(z))，负样本
+loss &= -T_i \log \sigma(z)，正样本，其中T_i表示观看时长 \\
+loss &= -\log(1-\sigma(z))，负样本
 \end{align}
 $$
+
 相当于一个正样本重复了$T_i$次，于是逻辑回归模型学习到的odds是：
+
 $$
-\exp(z) = \frac{\sum{T_i}}{N-k} \approx\mathbb{E}[T]
+\begin{align}
+\exp(z) &= \frac{\sum{T_i}}{N-k} \\
+&= \mathbb{E}[T](1+\frac{k}{N-k}) \\
+&\approx\mathbb{E}[T] & (假设k很小)
+\end{align}
 $$
 
 所以预测时采用$\exp$作为最后一层的激活函数。
