@@ -3,7 +3,8 @@ layout: post
 title: "Paper review: Deep Neural Networks for YouTube Recommendations"
 date: 2018-12-22 22:56:26 +0800
 comments: true
-categories: Machine Learning
+categories: 
+- machine learning
 ---
 
 这篇论文描述了YouTube的一个召回和排序模型，是整个推荐系统的一部分，但是也比较完整，从数据处理、召回
@@ -130,10 +131,11 @@ $$
 时长加权，而负样本使用1加权，则其损失函数为：
 
 $$
-\begin{align}
-loss &= -T_i \log \sigma(z)，正样本，其中T_i表示观看时长 \\
-loss &= -\log(1-\sigma(z))，负样本
-\end{align}
+loss=
+\begin{cases}
+-T_i \log \sigma(z) & \text{正样本，其中T_i表示观看时长} \\
+-\log(1-\sigma(z)) & \text{负样本}
+\end{cases}
 $$
 
 相当于一个正样本重复了$T_i$次，于是逻辑回归模型学习到的odds是：
