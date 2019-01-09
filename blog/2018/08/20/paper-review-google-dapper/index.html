@@ -1,0 +1,417 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Paper Review: Google Dapper - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="本文对Google的论文”Dapper, a Large-Scale Distributed Systems Tracing Infrastructure“的总结，这篇论文描述了Google的分布式跟踪系统Dapper. Introduction &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2018/08/20/paper-review-google-dapper/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Paper Review: Google Dapper</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2018-08-20T00:00:00+08:00'><span class='date'>2018-08-20</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>本文对Google的论文”<a href="https://static.googleusercontent.com/media/research.google.com/zh-CN//archive/papers/dapper-2010-1.pdf">Dapper, a Large-Scale Distributed Systems Tracing Infrastructure</a>“的总结，这篇论文描述了Google的分布式跟踪系统Dapper.</p>
+
+<!-- more -->
+
+<h1 id="introduction">Introduction</h1>
+
+<p>现代的互联网服务通常都是实现为复杂的大规模分布式系统，由许多分布在不同机器上的模块组成，这些模块可能
+是不同团队用不同编程语言开发的。开发一个工具用于帮助理解这个系统的行为、诊断性能问题是很有价值的。
+Dapper就是Google开发的这样一个分布式系统跟踪工具。</p>
+
+<p>考虑一个例子：web搜索引擎。前端服务会将一个搜索请求分发到许多查询服务器，每个查询服务器负责检索本地
+的索引分区。这个查询还会被分发到其它子系统处理诸如广告、拼写检查之类的工作。最后，所有这些服务的结果
+汇总成一个搜索结果页面。为了完成一个搜索查询需要许多机器协调工作，而且搜索对延迟是很敏感的。仅仅查看
+整体的耗时只能知道存在性能问题，但是无法知道是哪个服务导致的，也不知道原因。对于一个搜索查询，工程师
+并不知道有哪些服务在处理，因为系统在不断增加新服务。而且有很多服务是不同团队负责的，工程师无法知道每
+个服务的内部细节。很多服务会共享机器，所以性能问题也有可能是同机部署的其它服务导致的。</p>
+
+<p>根据上述例子我们可以发现分布式跟踪系统在空间上必须无所不在，在时间上持续监控。这就导致如下三个需求：
+- 低开销：跟踪系统必须对服务有几乎可忽略的影响。
+- 对应用开发者透明：开发者不需要关注这个跟踪系统。如果还需要开发者来介入，必然会导致遗漏。
+- 可伸缩性：能够应对大规模的分布式系统。</p>
+
+<p>另外，跟踪数据从产生到可以分析的延迟要足够短。</p>
+
+<h1 id="dapper">Dapper的系统设计</h1>
+
+<p>分布式跟踪必须记录一次请求发起到处理完成的整个过程。一个有用的信息必须包括请求的唯一标识和每个服务器
+发送和接收消息的时间戳。</p>
+
+<p><img src="/images/dapper_figure_1.png" /></p>
+
+<p>有两种方法可以将一次请求涉及到的所有服务的信息聚合起来：
+1. 黑盒：仅需要每个服务的消息记录，然后使用统计学模型推断消息之间的关联关系。
+2. 基于注解：每个消息都用一个全局唯一的标识符标记以便与请求关联起来。</p>
+
+<p>黑盒方法尽管可移植性更好，但是需要更多的数据才会有足够的正确性。基于注解的方法的主要缺点就是要对程序
+进行修改，但是由于Google的服务都是用的统一的代码库实现RPC、控制流，所以只需要对这些代码库进行修改即
+可，对服务开发者是透明的。</p>
+
+<h2 id="trace-trees-and-spans">Trace trees and spans</h2>
+
+<p>一次请求的跟踪可以看成一颗树，每个节点对应一个服务称为span. 边表示服务的上下游关系。每个span都有一个
+trace id, span id和parent span id. trace id用于唯一标识一个请求，span id用于唯一标识一个span. parent
+span id用于标记span的上游。这些ID都是64位的随机数。</p>
+
+<p><img src="/images/dapper_figure_2.png" /></p>
+
+<p>span记录了消息的开始和结束时间以及其它事件时间和服务开发者提供的相关注解信息。注意：span的数据可能来
+自多个机器。比如，一个RPC span包含了客户端和服务端的信息。</p>
+
+<p><img src="/images/dapper_figure_3.png" /></p>
+
+<h2 id="intrumentation-points">Intrumentation points</h2>
+
+<p>Dapper通过修改公共库来实现应用透明，主要集中在三点：
+- 线程模型，每个线程使用私有存储保存trace上下文.
+- 异步控制流保证每个回调函数能正确处理trace.
+- RPC库负责将trace id和span id传递给下游.</p>
+
+<h2 id="annotations">Annotations</h2>
+
+<p>除了修改框架自动产生跟踪数据外，Dapper也提供API允许服务开发者添加应用相关的信息方便调试。为了防止添
+加过多的数据，每个span都会限制数据大小。</p>
+
+<h2 id="trace">Trace的搜集</h2>
+
+<p>Trace的搜集有3步：(1) span数据写入本地文件, (2) Dapper从每个机器上读取数据然后(3)写入Bigtable.
+一个trace就是Bigtable的一行，trace id是key，每一列一个span. 数据从产生到写入存储的中位数耗时是15秒。</p>
+
+<p><img src="/images/dapper_figure_5.png" /></p>
+
+<p>从上面的描述我们可以看出trace的搜集是分开进行的（每个机器只负责记录本机的信息，而不是搜集下游的信息一起记录），原因有2个：
+1. 搜集下游的信息会导致响应过大，特别是对根节点服务。
+2. 不是所有的请求都是嵌套的，有些请求是异步的，下游在处理完之前会先发送响应给上游。</p>
+
+<h2 id="section">安全和隐私</h2>
+
+<p>有些场景对安全和隐私很敏感，记录RPC的数据会暴露安全风险。所以Dapper仅存储RPC的名字，不记录其中的数据。
+不过Dapper提供一些选项让开发者自行决定是否记录一些有用的数据。</p>
+
+<p>通过跟踪安全协议参数，Dapper可以监控服务是否满足安全政策的要求。</p>
+
+<h1 id="section-1">性能优化</h1>
+
+<p>Dapper对性能的影响有3点：trace的生成，trace的搜集和Dapper对生产服务的影响。</p>
+
+<p>生成trace的成本主要是创建和销毁span以及写入磁盘。trace的注解也会产生额外的开销，不过只有在trace被采
+样的时候。将span写入磁盘是开销最大的，通过批量写入和异步写入大大减少了对应用服务的影响。但是写入操作
+仍然会对高吞吐的应用产生一定的影响。</p>
+
+<p>在生产服务器上搜集trace数据也会影响生产服务进程。我们通过限制Dapper进程的调度优先级减小对CPU的竞争。
+Dapper进程也会消耗少量的网络带宽（不到0.01%）。</p>
+
+<p>为了评估Dapper进程对生产服务造成的影响，我们使用搜索集群作为例子来测量Dapper对平均耗时和吞吐量的影响。</p>
+
+<p><img src="/images/dapper_table_2.png" /></p>
+
+<p>虽然对吞吐量的影响很小，但为了避免对耗时产生影响，跟踪数据的采样还是有必要的。采用更低的采样频率可以
+让跟踪数据保留的时间更长些，给Dapper搜集服务更多时间。高吞吐量的服务采用更低的采样频率可以有效降低开
+销，而且由于事件发生的频率足够高，降低采样频率也会捕获到这些事件。但是对于低吞吐量的服务就必须提高采
+样频率了。所以，采样频率应该能够自适应。实际使用的采样频率与跟踪数据一起记录下来，方便分析工具据此统
+计跟踪频率。</p>
+
+<p>上述的采样是为了减小生成跟踪数据时对应用程序产生影响。Dapper还需要控制写入存储的数据量，以减小成本和
+降低对BigTable的写入带宽。所以还需要第二轮采样，在搜集跟踪数据时计算trace id的hash值<code>z</code>($0 \leq z \leq
+1$)，如果小于设置的采样比例就写入Bigtable，否则就丢弃。由于在不同的机器上一次请求的trace id是相同的，
+这种方法能保证要么保留一个trace的所有数据，要么全部丢弃，不会只保留一部分的情况。</p>
+
+<h1 id="dapper-1">Dapper工具设计</h1>
+
+<p>Dapper提供了API和web界面用于分析跟踪数据。提供的API主要有以下这些：
+- 根据trace id访问
+- 批量访问：指定时间窗口访问所有的trace
+- 根据索引查询：支持按服务名、机器和时间戳的联合索引查询。</p>
+
+<h1 id="section-2">使用经验</h1>
+
+<ul>
+  <li>开发时使用Dapper，表现在以下方面：
+    <ul>
+      <li>优化性能：Dapper有助于找出优化点。比如可以找出不必要的串行请求，特别是这些可能是其他人开发的子系统
+发起的。</li>
+      <li>正确性：观察服务之间的调用关系判断请求的下游是否正确。</li>
+      <li>帮助理解系统行为</li>
+      <li>测试</li>
+    </ul>
+  </li>
+  <li>解决长尾耗时
+    <ul>
+      <li>调试大型分布式系统的耗时问题是很困难的，因为很难重现。调试必须先建立假设，然后再通过数据来验证或
+推翻假设来定位原因，这需要不断试错。Dapper提供的数据有助于快速验证试错，提高调试效率。</li>
+    </ul>
+  </li>
+  <li>监控服务网络流量
+    <ul>
+      <li>网络监控工具可以发现异常的网络流量，但是却无法找到原因，而Dapper有助于这一点。</li>
+    </ul>
+  </li>
+  <li>监控共享资源的消耗情况
+    <ul>
+      <li>许多不同的业务都会依赖共享的存储服务（比如Bigtable，GFS，Chubby等），仅从这些服务来看很来知道请
+求的最终来源，也不知道不同业务对其资源的消耗情况。Dapper可以将整个请求处理栈汇集起来，有助于了解
+共享资源是被谁使用的。</li>
+    </ul>
+  </li>
+</ul>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>Dapper相当于是分布式版本的<code>gstack</code>，可以查看分布式系统的调用栈，帮助理解系统行为，诊断性能瓶颈。在实
+际使用过程中取得了良好的效果，也有以下一些局限性需要优化。
+- 对批处理的支持：Dapper假设一次只处理一个跟踪的请求，如果将多个请求合并起来处理将无法区分。
+- 对离线负载的支持：Dapper是设计来跟踪在线服务的。跟踪离线负载入MapReduce任务时需要将trace id跟某个
+  工作单元联系起来。
+- 诊断根因：Dapper有助于找出有问题的服务，但是不足于发现根本原因。
+- 记录内核级别的信息：这有时候方便找出根因。</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2018-08-20T00:00:00+08:00'><span class='date'>2018-08-20</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/distributed-system/'>distributed system</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2018/02/06/build-independent-tensorflow-serving-library/" title="Previous Post: 编译独立的Tensorflow Serving库">&laquo; 编译独立的Tensorflow Serving库</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/" title="Next Post: Paper review: Deep Neural Networks for YouTube Recommendations">Paper review: Deep Neural Networks for YouTube Recommendations &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

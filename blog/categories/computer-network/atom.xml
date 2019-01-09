@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Computer Network | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/computer-network/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[TCP FAQ]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/02/03/tcp-faq/"/>
+    <updated>2012-02-03T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/02/03/tcp-faq</id>
+    <content type="html"><![CDATA[<h2 id="mssmaximum-segment-size">什么是MSS(Maximum Segment Size)?</h2>
+
+<p>TCP用MSS选项允许接收方指定它可以接收的最大段长度。传输的双方通过这个选项协商
+出一个上方都接受的最大段长。这个值太大或太小都不好。太小使得每次传输的净荷数
+据太少，带宽使用率不高。太大会使得IP帧太大。这样的帧碰到具有较小的MTU的网络
+时不得不分片。这些片段中只要有一个超时都会导致整个帧重传。重传的概率随片段的
+增加而增加。MSS最好等于路径MTU（path MTU）。
+<!--more--></p>
+
+<h2 id="isn">初始序列号（ISN）如何选择？</h2>
+
+<p>The protocol places no restriction on a particular connection being used
+over and over again.  A connection is defined by a pair of sockets.  New
+instances of a connection will be referred to as incarnations of the
+connection.  The problem that arises from this is – “how does the TCP
+identify duplicate segments from previous incarnations of the
+connection?”; This problem becomes apparent if the connection is being
+opened and closed in quick succession, or if the connection breaks with
+loss of memory and is then reestablished.</p>
+
+<p>To avoid confusion we must prevent segments from one incarnation of a
+connection from being used while the same sequence numbers may still be
+present in the network from an earlier incarnation.  We want to assure
+this, even if a TCP crashes and loses all knowledge of the sequence numbers
+it has been using.  When new connections are created, an initial sequence
+number (ISN) generator is employed which selects a new 32 bit ISN.  The
+generator is bound to a (possibly fictitious) 32 bit clock whose low order
+bit is incremented roughly every 4 microseconds.  Thus, the ISN cycles
+approximately every 4.55 hours.  Since we assume that segments will stay in
+the network no more than the Maximum Segment Lifetime (MSL) and that the
+MSL is less than 4.55 hours we can reasonably assume that ISN’s will be
+unique.</p>
+
+<p>See p. 26 of [RFC793].</p>
+
+<h2 id="timewait">为什么要有TIME_WAIT状态？</h2>
+
+<p>有两个原因：</p>
+
+<ol>
+  <li>可靠地关闭TCP连接。考虑一下，若最后一个ACK帧丢失了，B会超时重传。A必须记
+住这个状态信息，以重传最后的ACK。若A没有这个状态信息，它会传送RST。这会被B解
+释为一个错误。若TCP要干净地关闭连接，它就必须正确地处理最后四个帧中任意一个
+帧的丢失。</li>
+  <li>使老的重复帧消失在网络中。TIME_WAIT状态的持续时间是MSL的2倍。TIME_WAIT状
+态过后会保证最后2个帧从网络中消失。这样若重新建立这个连接，可以保证上一次连
+接的老数据不会冒出来干扰这次连接。</li>
+</ol>
+
+<p>见[UNPv13e]的44页。</p>
+
+<h2 id="section">如何处理拥塞？</h2>
+
+<p>TCP维护2个窗口：接收方允许的窗口和拥塞窗口。最终允许发送的大小是这两个窗口的
+较小值。拥塞窗口的大小由慢启动算法计算。它还用了第三个参数，阈值。当新建立一
+个连接时，拥塞窗口初始化为MSS。每次成功传输成功后，拥塞窗口加MSS。第一次传输
+一个数据段，成功后拥塞窗口增加为2个MSS。然后发送两个数据段，若这两个都成功了，
+拥塞窗口增加为4个MSS。实际上，每批被确认的数据都使拥塞窗口加倍。不过，当增加
+到阈值时便停止。从这个点开始仅线性增加，每一批确认只增加一个MSS。每当有超时
+时将阈值设为原来的一半，并将拥塞窗口重新设为MSS，重新开始慢启动算法。</p>
+
+<p>见[Tanenbaum]的6.5.9节。</p>
+
+<h2 id="out-of-band-data">什么是带外数据（Out of band data）？</h2>
+
+<p>有时候用户需要发送紧急信息给对方，即使对方还没有处理完缓存中的数据或对方的接
+收允许窗口为0（advertised window of 0）时。例如在远程登录会话中，用户可能会
+发送中断信号以关闭程序，而这时程序也许正等待输入。该中断信号必须马上发送而不
+是等待程序执行完毕。这就需要用到带外数据。带外数据主要是用于这种远程交互式程
+序中，如telnet，ssh等。</p>
+
+<p>当需要发送紧急数据时，TCP可以让发送者将数据标记为紧急的，设置URG code bit和
+URGENT POINTER。URGENT POINTER指向紧急数据结束的地方，也就是说该点之前的数据
+为紧急数据。URGENT POINTER前一个字节称为<strong>带外字节</strong>（Out
+ofband byte，OOB)。接收方一旦收到标有URG的数据段时便通知应用程序进入紧急模式，
+并在收完紧急数据后通知应用程序进入常规模式。至于如何通知的具体细节取决于操作
+系统。详情见[UNPv13e]第24章。</p>
+
+<h2 id="silly-window-syndrome">何谓愚笨窗口综合症（Silly Window Syndrome）及如何解决？</h2>
+
+<p>愚笨窗口综合症有2种变现形式：接收方愚笨窗口综合症和发送方愚笨窗口综合症。</p>
+
+<p>考虑以下情形。当接收方的接收缓存满时，它会通知对方它的接收允许窗口为0，使发
+送方不要再继续发送数据。这时接收应用程序从接收缓存中读入一个字节，那么就空出
+了一个字节的空间。接收TCP马上告知对方它的接收允许窗口为1。发送方因此发送1字
+节的数据给接收方。这样，每当接收应用程序读取1字节数据时都会触发发送方发送1字
+节数据。显然每一个数据段仅携带如此少的用户数据是相当低效的。这就是接收方愚笨
+窗口综合症。</p>
+
+<p>和接收方一样，发送方也会产生这个问题。如果发送方每次只生成少量的数据，发送
+TCP就会传输一个携带少量用户数据的数据段。这就是发送方愚笨窗口综合症。</p>
+
+<p>要避免这个问题可以采用很简单的启发式方法。当接收方有少量的可用缓存时，不要急
+着增加接收允许窗口。同样，当发送方有少量的数据要发送时，也不要急着发送，等到
+数据足够多时再发送。</p>
+
+<blockquote>
+  <p><em>Receive-side Silly Window Avoidance</em>: Before sending an updated window
+advertisement after advertising a zero window, wait for space to become
+available that is either at least 50% of the total buffer size or equal to
+a maximum sized segment.</p>
+</blockquote>
+
+<blockquote>
+  <p><em>Send-side Silly Window Avoidance</em>: When a sending application generates
+additional data to be sent over a connection for which previous data has
+been transmitted but not acknowledged, place the new data in the output
+buffer as usual, but do not send additional segments until there is
+sufficient data to fill a maximum-sized segment. If still waiting to
+send when an acknowledgement arrives, send all data that has accumulated in
+the buffer. Apply the rule even when the user requests a push
+operation.</p>
+</blockquote>
+
+<p>发送方愚笨窗口综合症避免算法又称为<strong>Nagle算法</strong>。它非常优美简洁，
+而且是自适应的。它延迟发送的时间取决于网络的当前性能，因此能自适应于慢速的和
+快速的网络。另见[Comer]的12.32，12.33。</p>
+
+<p>当然有时候这个算法是我们所不希望的。在远程交互式程序中，用户希望每敲入一个字
+符都能立即发送到服务器上去，而不是等待这个字符被确认后才能发送下一个字符。可
+以通过一个TCP选项禁用Nagle算法。详情见[UNPv13e]的7.9节。</p>
+
+<h2 id="section-1">参考文献</h2>
+
+<ul>
+  <li>[RFC793] <em>Transmission Control Protocol</em>.</li>
+  <li>[Comer] Douglas E. Comer. <em>Internetworking with TCP/IP</em>, Vol. 1, Fifth Edition.</li>
+  <li>[UNPv13e] Richard Stevens, Bill Fenner and Andrew M. Rudoff. <em>UNIX Network Programming</em>, Vol. 1, Third Edition.</li>
+  <li>[Tanenbaum] Andrew S. Tanenbaum. <em>Compuer Networks</em>, Fourth Edition.</li>
+</ul>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[TCP协议浅析]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/02/03/notes-on-tcp/"/>
+    <updated>2012-02-03T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/02/03/notes-on-tcp</id>
+    <content type="html"><![CDATA[<h2 id="section">简介</h2>
+
+<p>应用程序通常都需要从一个主机传送大量的数据到另一个主机。采用不可靠的传输机制
+会使程序变得异常复杂和困难，因为程序需要检测传输错误和重传丢失的数据等。因此
+迫切地需要一种能解决可靠性传输问题的通用机制，这就是TCP诞生的目的。有了这样
+一个协议就使得应用程序无需考虑网络的各种细节。
+<!--more-->
+TCP建立在无连接的、不可靠的IP协议基础之上，为达到它的目的，必须解决以下几个问题：</p>
+
+<ol>
+  <li><strong>可靠性</strong>：若数据丢失或出错怎么办。</li>
+  <li><strong>按序到达</strong>：由于IP协议传输每一帧数据时可能选择不同的路径，因此到达目标机的时间不一样。后发送的数据可能比先发送的数据先到达目标机。那么目标机如何保证组装的数据的顺序是正确的呢？</li>
+  <li><strong>流控制</strong>：如果源机器比目标机处理数据的速度快，那么如何保证快速的发送方不会淹没慢速的接收方？</li>
+  <li><strong>拥塞控制</strong>：流控制解决的是端到端（end-to-end）的传输问题，但是TCP是通过网络传输数据的，这里涉及到发送方与网络的交互问题。如果发送方发送太多的数据使得网络疲于处理，将使得网络的吞吐量极具下降，最终使网络瘫痪。TCP必须考虑到这一问题。</li>
+</ol>
+
+<p>本文将逐一介绍TCP是如何解决这些问题的。
+<!--more--></p>
+
+<h2 id="section-1">提供可靠性</h2>
+
+<p>“如何在不可靠的传输系统上提供可靠的传输呢？”大多数可靠的协议都用一个很简单的
+技术来解决这个问题：确认和重传。它要求接收方每收到一个消息后都向发送方发送一
+个确认消息。发送方记下每一个发出去的消息，在发出下一消息之前等待确认。发送方
+每次发送消息时还要启动一个定时器，如果此定时器超时而确认没有收到就重新发送刚
+才的消息。这就是<strong>停等协议</strong>（Stop-and-Wait Protocol）。</p>
+
+<p>数据的丢失问题解决了，但是这个协议没有解决重复的数据。不可靠的传输技术会重复
+发送数据。高延迟的网络导致过早的重传也会产生重复的数据。TCP为每一个传输的字
+节分配一个<strong>序列号</strong>解决了这个问题。每一个确认帧也有序列号，以
+表明它是对哪一个帧的确认。另外，序列号还可以表示这个数据的顺序，接收方可根据
+序列号重组（reassemble）数据，这样就可以保证数据的顺序是正确的。</p>
+
+<p>停等协议和序列号解决了可靠性和按序到达，但是它的效率太低了。因为每次都要等确
+认帧回来后才能发送下一帧。若网络的延迟太大会大大降低传输效率。这样就诞生
+了<strong>滑动窗口算法</strong>（sliding window algorithm）。它是停等协议的
+更复杂的版本，停等协议只不过是它的一种特殊情况（窗口大小为1）。在滑动窗口算
+法下，窗口内的帧都可以立即发送，然后每当确认到达后，窗口就向后移动并可以发送
+更多的帧。滑动窗口算法可以更高效地利用网络带宽，因为它允许发送方在等到确认前
+发送多个帧。那些已发送出去但还没有确认的帧称为未确认帧。未确认帧的数量取决于
+窗口的大小。另外值得注意的是，窗口的大小不应超过序列号最大值的一半。（原因见
+[Tanenbaum]的3.4.3节）。</p>
+
+<h2 id="section-2">可变窗口大小和流控制</h2>
+
+<p>TCP的滑动窗口与之前提到的版本的区别就是在TCP中这个窗口大小是可变的。TCP发送
+方和接收方都有窗口。接收方的窗口大小可理解成可以接收的数据量，也就是接收缓存
+大小。接收方在每一个帧中都会告诉发送方这个缓存的大小。</p>
+
+<p>可变窗口不仅可以解决可靠性问题，还可以解决流控制问题。接收方若缓存不够用，为
+了避免接收更多的数据，它可以减小接收窗口的大小。在极端情况下，它可以将接收窗
+口设为0以停止接收数据。稍后，若接收方的可用缓存变大，它可将接收窗口增加以触
+发发送发发送数据。</p>
+
+<h2 id="section-3">拥塞控制</h2>
+
+<p>拥塞控制与流控制是不同的概念。流控制是处理发送方和接收方交互的问题，而拥塞控制涉及的是发送方和网络的交互问题。</p>
+
+<p>通信的主机可以通过接收窗口知道对方是否可以接收帧以及接收多少帧，但通常不知道
+哪里发送了拥塞以及为什么发送拥塞。对它们来讲，拥塞仅意味着延迟变长。这样确认
+超时导致重传。重传使得拥塞变得更严重。最终会使得网络完全崩溃，不能传输任何数
+据。</p>
+
+<p>为了避免拥塞，TCP采用两个技术实现：<strong>slow-start（慢启动）</strong>和
+<strong>multiplicative decrease</strong>，并引入<strong>拥塞窗口</strong>（congestion window）的概念，
+用于限制发送窗口的大小。也就是说，发送窗口的大小是接收窗口和拥塞窗口的较小值。</p>
+
+<blockquote>
+  <p>慢启动算法：当建立连接后初次发送数据或拥塞解除后，拥塞窗口初始为1，然后每当及时收到确认时加1。
+Multiplicative Decrease：每当丢失一个帧时（没有及时收到确认），拥塞窗口减小一半。</p>
+</blockquote>
+
+<h2 id="section-4">参考文献</h2>
+
+<ul>
+  <li>[Comer] Douglas E. Comer. <em>Internetworking with TCP/IP</em>, Volume 1, Fifth Edition.</li>
+  <li>[Tanenbaum] <em>Computer Networks</em>, Fourth Edition.</li>
+</ul>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[FTP的主动和被动模式]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/02/03/ftp-active-and-passive-mode/"/>
+    <updated>2012-02-03T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/02/03/ftp-active-and-passive-mode</id>
+    <content type="html"><![CDATA[<p>FTP是仅基于TCP的服务，不支持UDP。与众不同的是FTP使用2个端口，一个数据端口和
+一个命令端口（也可叫做控制端口）。通常来说这两个端口是21（命令端口）和20（数
+据端口）。但FTP工作方式的不同，数据端口并不总是20。这就是主动与被动FTP的最大
+不同之处。
+<!--more--></p>
+
+<h2 id="ftp">主动FTP</h2>
+
+<p>主动方式的FTP是这样的：客户端从一个任意的非特权端口N（N &gt; 1024）连接到FTP服
+务器的命令端口，也就是21端口。然后客户端开始监听端口N+1，并发送FTP命令“PORT
+N+1”到FTP服务器。接着服务器会从它自己的数据端口（20）连接到客户端指定的数据
+端口（N+1）。</p>
+
+<p>针对FTP服务器前面的防火墙来说，必须允许以下通讯才能支持主动方式FTP：</p>
+
+<ol>
+  <li>任何大于1024的端口到FTP服务器的21端口。（客户端初始化的连接）；</li>
+  <li>FTP服务器的21端口到大于1024的端口。 （服务器响应客户端的控制端口）；</li>
+  <li>FTP服务器的20端口到大于1024的端口。（服务器端初始化数据连接到客户端的数据端口）；</li>
+  <li>大于1024的端口到FTP服务器的20端口（客户端发送ACK响应到服务器的数据端口）。</li>
+</ol>
+
+<h2 id="ftp-1">被动FTP</h2>
+
+<p>为了解决服务器发起到客户的连接的问题，人们开发了一种不同的FTP连接方式。这就
+是所谓的被动方式，或者叫做PASSIVE，当客户端通知服务器它处于被动模式时才启用。
+在被动方式FTP中，命令连接和数据连接都由客户端发起，这样就可以解决从服务器到
+客户端的数据端口的入方向连接被防火墙过滤掉的问题。当开启一个FTP连接时，客户
+端打开两个任意的非特权本地端口（N &gt; 1024和N+1）。第一个端口连接服务器的
+21端口，但与主动方式的FTP不同，客户端不会提交PORT命令并允许服务器来回连它的
+数据端口，而是提交PASV命令。这样做的结果是服务器会开启一个任意的非特权端口
+（P &gt; 1024），并发送PORT P命令给</p>
+
+<p>客户端。然后客户端发起从本地端口N+1到服务器的端口P的连接用来传送数据。对于服务器端的防火墙来说，必须允许下面的通讯才能支持被动方式的FTP:</p>
+
+<ol>
+  <li>从任何大于1024的端口到服务器的21端口（客户端初始化的连接） ；</li>
+  <li>服务器的21 端口到任何大于1024的端口（服务器响应到客户端的控制端口的连接） ；</li>
+  <li>从任何大于1024端口到服务器的大于1024端口（客户端初始化数据连接到服务器指定的任意端口）；</li>
+  <li>服务器的大于1024端口到远程的大于1024的端口（服务器发送ACK响应和数据到客户端的数据端口）。</li>
+</ol>
+
+<p>以上关于主动和被动FTP的解释，可以简单概括为以下两点：</p>
+
+<ol>
+  <li>主动FTP:<br />
+命令连接：客户端 &gt; 1024端口 -&gt; 服务器 21端口<br />
+数据连接：客户端 &gt; 1024端口 -&gt; 服务器 20端口</li>
+  <li>被动FTP：<br />
+命令连接：客户端 &gt;1024端口 -&gt; 服务器 21端口<br />
+数据连接：客户端 &gt;1024端口 -&gt; 服务器 &gt; 1024端口</li>
+</ol>
+
+<h2 id="ftp-2">主动与被动FTP优缺点</h2>
+
+<p>主动FTP对FTP服务器的管理有利，但对客户端的管理不利。因为 FTP服务器企图与客户
+端的高位随机端口建立连接，而这个端口很有可能被客户端的防火墙阻塞掉。被动FTP
+对FTP客户端的管理有利，但对服务器端的管理不利。因为客户端要与服务器端建立两
+个连接，其中一个连到一个高位随机端口，而这个端口很有可能被服务器端的防火墙阻
+塞掉。</p>
+]]></content>
+  </entry>
+  
+</feed>

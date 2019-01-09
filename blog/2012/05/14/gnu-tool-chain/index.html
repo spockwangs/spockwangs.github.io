@@ -1,0 +1,420 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>GNU Tool Chain - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Create Static Libraries To compile source files $ gcc -c file1.c file2.c ... To create archives $ ar r lib&lt;sth&gt;.a file1.o file2.o ... See ar(1 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/05/14/gnu-tool-chain/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">GNU Tool Chain</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-05-14T00:00:00+08:00'><span class='date'>2012-05-14</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="create-static-libraries">Create Static Libraries</h2>
+
+<p>To compile source files</p>
+
+<pre><code>$ gcc -c file1.c file2.c ...
+</code></pre>
+
+<p>To create archives</p>
+
+<pre><code>$ ar r lib&lt;sth&gt;.a file1.o file2.o ...
+</code></pre>
+
+<p>See <code>ar(1)</code>.
+<!--more--></p>
+
+<h2 id="link-with-static-libraries">Link with Static Libraries</h2>
+
+<pre><code>$ gcc -static -o outputfile file1.c file2.c -L&lt;search path&gt; -l&lt;archive name&gt;
+</code></pre>
+
+<p>Use option <code>-static</code> to avoid linking against shared libraries.  Use option
+<code>-l</code> to specify which libraries are required and <code>-L</code> to specify where to find
+these libraries.  If the required libraries are in system paths (i.e. <code>/lib</code>
+and <code>/usr/lib</code>) <code>-L</code> is not required because the linker will search the system
+path by default.  The paths are searched in the following order:</p>
+
+<ol>
+  <li>The paths specified by <code>-L</code> and by <code>SEARCH_DIR</code> command in the link script (not the default link
+script, but the one specified by <code>-T</code>) in the command line from left to right;</li>
+  <li>The paths specified by <code>SEARCH_DIR</code> command in the default link script if it is not yet replaced
+by the <code>-T</code> option.</li>
+</ol>
+
+<p>The contents of the default link script can be printed by using <code>--verbose</code> option to <code>ld</code>.</p>
+
+<p>See <code>-L</code>, <code>-T</code> and <code>-dT</code> in <code>ld(1)</code>.</p>
+
+<h2 id="how-linkers-use-static-libraries-to-resolve-references">How Linkers Use Static Libraries to Resolve References</h2>
+
+<p>See Section 7.6.3 of Computer Systems: A Programmer’s Perspective.</p>
+
+<p>Watch out for mutual dependences and cyclic dependences of the static libraries.  See option <code>--start-group</code> of <code>ld(1)</code>.</p>
+
+<h2 id="create-shared-libraries">Create Shared Libraries</h2>
+
+<pre><code>$ gcc -shared -fpic -o somename.so file1.c file2.c ... dependent_shared_libraries
+</code></pre>
+
+<p>The dependent shared libraries will be stored in the .dynamic section (its
+type is <code>DT_NEED</code> and its value is whatever you put on the command line
+(absolute or relative path), you can check it using <code>readelf -d</code>) of the
+generated shared object.  It tells the dynamic linker which libraries are
+needed by this shared object.</p>
+
+<h2 id="link-with-shared-libraries">Link with shared libraries</h2>
+
+<pre><code>$ gcc -o outputfile file1.c file2.c ... -L&lt;search path&gt; -l&lt;library name&gt; ... -Wl,-rpath,&lt;path&gt; ...
+</code></pre>
+
+<p>Like linking with static objects, when linking with shared objects the
+linker needs to know which objects are required and where to find them.  It
+uses the same mechanisms as linking with static objects to specify these
+info.  See above “Link with Static Libraries”.</p>
+
+<p>If the shared objects on the command line require other shared objects (you
+can check this by see the entry type <code>DT_NEED</code> of <code>.dynamic</code> section), the
+linker editor needs to know where to find the required shared objects.
+This info can be specified with the option <code>-rpath-link</code> or
+<code>-rpath</code> of ld or by other ways.  See <code>ld(1)</code> about options
+<code>-rpath-link</code> and <code>-rpath</code>.</p>
+
+<p>For example:</p>
+
+<pre><code>$ gcc main.c -L. -lfun -Wl,-rpath,pos
+</code></pre>
+
+<p>where <code>main.c</code> depends libfun.so which depends on some shared objects
+resides in <code>pos</code>.  Option <code>-Wl,</code> is a way for gcc to pass options to <code>ld</code>.</p>
+
+<p>There are other ways to specify the link-time shared objects search path
+other than the above ways and they are searched in the following order:</p>
+
+<ol>
+  <li>-rpath-link</li>
+  <li>-rpath</li>
+  <li>Environment variable <code>LD_LIBRARY_PATH</code></li>
+  <li>system paths <code>/lib</code> and <code>/usr/lib</code></li>
+  <li>the directories specified in <code>/etc/ld.so.conf</code></li>
+</ol>
+
+<p>This is incomplete.  See option <code>-rpath-link</code> of <code>ld(1)</code> for more details.</p>
+
+<h2 id="runtime-shared-objects-search-path">Runtime shared objects search path</h2>
+
+<p>When a executive which depends on some shared objects runs the dynamic
+linker needs to load those shared objects.  So it needs to know two things:
+which shared objects and where to find them.</p>
+
+<p>The required shared objects are stored in the <code>DT_NEED</code> entry (shown as
+“(NEEDED)” in output of <code>readelf -d</code>, may not exist if it does not depend
+on anything) of <code>.dynamic</code> section in the object, which is specified on the
+command line when generating this object file.</p>
+
+<p>If the value of <code>DT_NEED</code> entry is a path (absolute or relative, i.e. has a
+slash) the dynamic linker will try to find it there, and if not found the
+executable can not run.  If it is just a file name the dynamic linker will
+search for it in a series of paths in the following order:</p>
+
+<ol>
+  <li>The paths (separated by colons) in the entry <code>DT_RPATH</code> of <code>.dynamic</code>
+section in the executable (these paths are specified by the option <code>-rpath</code>
+of <code>ld</code> or <code>-Wl,-rpath</code> of gcc);</li>
+  <li>The paths in the environment variable <code>LD_LIBRARY_PATH</code> (separated
+by colons);</li>
+  <li>The paths specified in <code>/etc/ld.so.conf</code> (actually <code>/etc/ld.so.cache</code>,
+so if you edit <code>/etc/ld.so.conf</code> you should run <code>ldconfig</code> to update the
+cache and the shared objects should be named like libxxx.so);</li>
+  <li><code>/lib</code></li>
+  <li><code>/usr/lib</code></li>
+</ol>
+
+<p>Note: all the paths mentioned above is relative to the current working
+directory if it is a relative path.</p>
+
+<p>You can see the searching process by setting the environment variable
+<code>LD_DEBUG</code> to <code>libs</code> when running the executable.  See <code>ld.so(8)</code>.</p>
+
+<h2 id="loading-of-dependent-shared-objects-and-symbol-resolving">Loading of dependent shared objects and symbol resolving</h2>
+
+<p>Often the executive depends on some shared objects, which depends on some
+other objects, which depends on some others, and so on.  So the depend
+relation is like a graph with the executive being the root.  The Linux
+dynamic linker is responsible for loading the dependent shared objects and
+loads them in breadth first search (BFS) order.  The dynamic liner has a
+global symbol table which includes all symbols it knows so far.  The global
+symbol table is used to resolve symbols in the executive when running.  It
+merges the symbol table of the shared object with global symbol table when
+loaded.  If the symbol table has some symbol with the same name as a symbol
+in the global symbol table, it will be ignored.  This will lead to global
+symbol interposition.  So if we want to avoid this problem we must make
+sure the global variables and functions in our programs have unique names.</p>
+
+<p>The phase of symbol resolving begins after all dependent shared objects are
+loaded and global symbol table is constructed.</p>
+
+<p>The procedure of loading and symbol resolving can be checked using the env
+variable <code>LD_DEBUG</code>.  See <code>ld.so(8)</code>.</p>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li><code>ld(1)</code> options <code>-shared</code>, <code>-L</code>, <code>-l</code>, <code>-rpath</code>, <code>-rpath-link</code></li>
+  <li><a href="http://man7.org/linux/man-pages/man8/ld.so.8.html"><code>ld.so(8)</code></a></li>
+  <li>gcc(1) options <code>-shared</code>, <code>-static</code>, and <code>-Wl,</code></li>
+  <li>See <a href="http://refspecs.linuxbase.org/elf/gabi4+/ch5.dynamic.html#shobj_dependencies">here</a> for <code>DT_RPATH</code> and <code>DT_RUNPATH</code>.</li>
+  <li>程序员的自我修养，Sections 7.6, 8.4 and 8.5</li>
+  <li>Computer System: A Programmer’s Perspective, Chapter 7.</li>
+  <li>See <a href="https://wiki.debian.org/Multiarch/LibraryPathOverview">here</a> for multi-arch support on toolchain implications.</li>
+</ul>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-05-14T00:00:00+08:00'><span class='date'>2012-05-14</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/operating-system/'>operating system</a>, <a class='category' href='/blog/categories/programming-language/'>programming language</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/05/14/c-gotchas/" title="Previous Post: C++ Gotchas">&laquo; C++ Gotchas</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/05/16/mysql-help/" title="Next Post: MySql Help">MySql Help &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

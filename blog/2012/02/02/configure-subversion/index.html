@@ -1,0 +1,380 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>配置Subversion - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="配置Subversion服务器使用xinetd启动 建立/etc/xinetd.d/svn，内容如下： 1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+service svn
+{ disable = no id = svn- &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/02/02/configure-subversion/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">配置Subversion</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-02T00:00:00+08:00'><span class='date'>2012-02-02</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="subversionxinetd">配置Subversion服务器使用xinetd启动</h2>
+<!--more-->
+
+<ol>
+  <li>建立/etc/xinetd.d/svn，内容如下：</li>
+</ol>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+<span class="line-number">22</span>
+<span class="line-number">23</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">service svn
+</span><span class="line">{
+</span><span class="line">    disable = no
+</span><span class="line">    id = svn-stream
+</span><span class="line">    socket_type = stream
+</span><span class="line">    protocol = tcp
+</span><span class="line">    user = xxx   # 运行svnserve的用户名
+</span><span class="line">    wait = no
+</span><span class="line">    server = /usr/bin/svnserve
+</span><span class="line">    server_args = -i -r /path/to/repository
+</span><span class="line">}
+</span><span class="line">
+</span><span class="line">service svn
+</span><span class="line">{
+</span><span class="line">    disable = no
+</span><span class="line">    id = svn-dgram
+</span><span class="line">    socket_type = dgram
+</span><span class="line">    protocol = udp
+</span><span class="line">    user = xxx   # 运行svnserve的用户名
+</span><span class="line">    wait = yes
+</span><span class="line">    server = /usr/bin/svnserve
+</span><span class="line">    server_args = -i -r /path/to/repository
+</span><span class="line">}</span></code></pre></td></tr></table></div></figure>
+<ol>
+  <li>重启xinetd服务器。</li>
+</ol>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">$ sudo invoke-rc.d xinetd restart</span></code></pre></td></tr></table></div></figure>
+<p>接下来我们就可以采用svn协议访版本库中的数据了。</p>
+
+<h2 id="svn">建立SVN仓库</h2>
+
+<ol>
+  <li>确定仓库的地址，假设为<code>/home/svn</code>.</li>
+  <li>创建一个仓库，名为<code>repos</code>:</li>
+</ol>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">$ svnadmin create /home/svn/repos</span></code></pre></td></tr></table></div></figure>
+<ol>
+  <li>配置仓库访问控制。编辑<code>/home/svn/repos/conf/svnserve</code>：</li>
+</ol>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">[general]
+</span><span class="line"># ...
+</span><span class="line">anon-access = read
+</span><span class="line">auth-access = write
+</span><span class="line"># ...
+</span><span class="line">password-db = passwd
+</span><span class="line">...</span></code></pre></td></tr></table></div></figure>
+<pre><code>在`[general]`下有几个属性控制访问权限。`anon-access`控制匿名用户的访问权限，
+`auth-access`控制授权用户的访问权限，它们可以为`read`, `write`, `none`。权限
+控制有几种方式，最简单的一种是通过密码文件来授权。密码文件的位置由
+`password-db`指定,一般就放在与`svnserve`同一目录下，叫`passwd`，格式如下：
+</code></pre>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">    name = password</span></code></pre></td></tr></table></div></figure>
+<pre><code>等号左边是用户名，右边是密码。如果不允许匿名操作，则需要输入密码。 4.  导入需要版本控制的数据。假设数据在`tree`目录下，要导入到刚刚建立的仓库中：
+</code></pre>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">$ svn import tree svn://svnhost/repos/project</span></code></pre></td></tr></table></div></figure>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-02T00:00:00+08:00'><span class='date'>2012-02-02</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/administration/'>administration</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/02/02/check-process-memory/" title="Previous Post: 查看进程的内存使用情况">&laquo; 查看进程的内存使用情况</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/02/02/emacs-config-in-windows/" title="Next Post: 在Windows上配置Emacs 23">在Windows上配置Emacs 23 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

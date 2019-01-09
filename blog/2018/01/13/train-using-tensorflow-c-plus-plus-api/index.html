@@ -1,0 +1,930 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>用Tensorflow C++ API训练模型 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="用Tensorflow解决机器学习的问题时通常是用Python API构造模型并训练模型参数，然后将模型序列化到文件中。部署到线上时使用C++ API加载模型对输入进行预测。Tensorflow还专门提供了Serving模块来优化线上部署，除了进行预测外还提供了对模型的版本管理和模型热更新。 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">用Tensorflow C++ API训练模型</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2018-01-13T21:14:48+08:00'><span class='date'>2018-01-13</span> <span class='time'>9:14 pm</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>用Tensorflow解决机器学习的问题时通常是用Python API构造模型并训练模型参数，然后将模型序列化到文件中。部署到线上时使用C++ API加载模型对输入进行预测。Tensorflow还专门提供了Serving模块来优化线上部署，除了进行预测外还提供了对模型的版本管理和模型热更新。但是为了更快地训练模型，缩短模型更新周期，就必须支持线上实时训练，也就是说必须支持用C++ API训练模型。但是C++ API目前还不完善，还不方便构造模型，所以仍然使用Python API构造模型，并导出给C++ API加载训练。</p>
+
+<p>本文给出两种方法来编译C++库，一种是共享库，一种是静态库。
+<!--more--></p>
+
+<h2 id="section">准备</h2>
+
+<ol>
+  <li>安装Bazel</li>
+  <li>安装Tensorflow for Python.</li>
+  <li>
+    <p>下载Tensorflow源代码</p>
+
+    <p><code>
+$ git clone https://github.com/tensorflow/tensorflow.git
+</code></p>
+  </li>
+  <li>用Python API构造模型，我们以MNIST的softmax回归模型为例，代码如下：</li>
+</ol>
+
+<figure class="code"><figcaption><span>create_model.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+<span class="line-number">22</span>
+<span class="line-number">23</span>
+<span class="line-number">24</span>
+<span class="line-number">25</span>
+<span class="line-number">26</span>
+<span class="line-number">27</span>
+<span class="line-number">28</span>
+<span class="line-number">29</span>
+<span class="line-number">30</span>
+<span class="line-number">31</span>
+<span class="line-number">32</span>
+<span class="line-number">33</span>
+<span class="line-number">34</span>
+<span class="line-number">35</span>
+<span class="line-number">36</span>
+<span class="line-number">37</span>
+<span class="line-number">38</span>
+<span class="line-number">39</span>
+<span class="line-number">40</span>
+<span class="line-number">41</span>
+<span class="line-number">42</span>
+<span class="line-number">43</span>
+<span class="line-number">44</span>
+<span class="line-number">45</span>
+<span class="line-number">46</span>
+<span class="line-number">47</span>
+<span class="line-number">48</span>
+<span class="line-number">49</span>
+<span class="line-number">50</span>
+<span class="line-number">51</span>
+<span class="line-number">52</span>
+<span class="line-number">53</span>
+<span class="line-number">54</span>
+<span class="line-number">55</span>
+<span class="line-number">56</span>
+<span class="line-number">57</span>
+<span class="line-number">58</span>
+<span class="line-number">59</span>
+<span class="line-number">60</span>
+<span class="line-number">61</span>
+<span class="line-number">62</span>
+<span class="line-number">63</span>
+<span class="line-number">64</span>
+<span class="line-number">65</span>
+<span class="line-number">66</span>
+<span class="line-number">67</span>
+<span class="line-number">68</span>
+</pre></td><td class="code"><pre><code class="python"><span class="line"><span class="kn">import</span> <span class="nn">tensorflow</span> <span class="kn">as</span> <span class="nn">tf</span>
+</span><span class="line"><span class="kn">import</span> <span class="nn">getopt</span>
+</span><span class="line"><span class="kn">import</span> <span class="nn">sys</span>
+</span><span class="line"><span class="kn">import</span> <span class="nn">exceptions</span>
+</span><span class="line"><span class="kn">import</span> <span class="nn">traceback</span>
+</span><span class="line">
+</span><span class="line"><span class="k">class</span> <span class="nc">Usage</span><span class="p">(</span><span class="ne">Exception</span><span class="p">):</span>
+</span><span class="line">    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+</span><span class="line">        <span class="bp">self</span><span class="o">.</span><span class="n">msg</span> <span class="o">=</span> <span class="n">msg</span>
+</span><span class="line">
+</span><span class="line"><span class="k">def</span> <span class="nf">usage</span><span class="p">(</span><span class="n">progname</span><span class="p">):</span>
+</span><span class="line">    <span class="k">print</span><span class="p">(</span><span class="s">&#39;&#39;&#39;Usage:</span>
+</span><span class="line"><span class="s">    {progname} [-h | --help] --export_dir &lt;dir&gt; [--as_text]&#39;&#39;&#39;</span><span class="o">.</span><span class="n">format</span><span class="p">(</span><span class="n">progname</span><span class="o">=</span><span class="n">progname</span><span class="p">))</span>
+</span><span class="line">
+</span><span class="line"><span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+</span><span class="line">    <span class="k">if</span> <span class="n">argv</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+</span><span class="line">        <span class="n">argv</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">argv</span>
+</span><span class="line">    <span class="k">try</span><span class="p">:</span>
+</span><span class="line">        <span class="k">try</span><span class="p">:</span>
+</span><span class="line">            <span class="n">opts</span><span class="p">,</span> <span class="n">args</span> <span class="o">=</span> <span class="n">getopt</span><span class="o">.</span><span class="n">getopt</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">:],</span> <span class="s">&quot;h&quot;</span><span class="p">,</span> <span class="p">[</span> <span class="s">&#39;help&#39;</span><span class="p">,</span> <span class="s">&#39;export_dir=&#39;</span><span class="p">,</span> <span class="s">&#39;as_text&#39;</span> <span class="p">])</span>
+</span><span class="line">        <span class="k">except</span> <span class="n">getopt</span><span class="o">.</span><span class="n">error</span> <span class="k">as</span> <span class="n">msg</span><span class="p">:</span>
+</span><span class="line">            <span class="k">raise</span> <span class="n">Usage</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
+</span><span class="line">
+</span><span class="line">        <span class="k">global</span> <span class="n">g_debug_mode</span>
+</span><span class="line">        <span class="n">export_dir</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+</span><span class="line">        <span class="n">as_text</span> <span class="o">=</span> <span class="bp">False</span>
+</span><span class="line">        <span class="k">for</span> <span class="n">o</span><span class="p">,</span> <span class="n">a</span> <span class="ow">in</span> <span class="n">opts</span><span class="p">:</span>
+</span><span class="line">            <span class="k">if</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&#39;-h&#39;</span><span class="p">,</span> <span class="s">&#39;--help&#39;</span><span class="p">):</span>
+</span><span class="line">                <span class="n">usage</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</span><span class="line">                <span class="k">return</span> <span class="mi">0</span>
+</span><span class="line">            <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&#39;-d&#39;</span><span class="p">):</span>
+</span><span class="line">                <span class="n">g_debug_mode</span> <span class="o">=</span> <span class="bp">True</span>
+</span><span class="line">            <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&#39;--export_dir&#39;</span><span class="p">):</span>
+</span><span class="line">                <span class="n">export_dir</span> <span class="o">=</span> <span class="n">a</span>
+</span><span class="line">            <span class="k">elif</span> <span class="n">o</span> <span class="ow">in</span> <span class="p">(</span><span class="s">&#39;--as_text&#39;</span><span class="p">):</span>
+</span><span class="line">                <span class="n">as_text</span> <span class="o">=</span> <span class="bp">True</span>
+</span><span class="line">            <span class="k">else</span><span class="p">:</span>
+</span><span class="line">                <span class="k">raise</span> <span class="n">Usage</span><span class="p">(</span><span class="s">&#39;Bad option: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">o</span><span class="p">))</span>
+</span><span class="line">        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">export_dir</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+</span><span class="line">            <span class="k">raise</span> <span class="n">Usage</span><span class="p">(</span><span class="s">&#39;Bad value for option --export_dir&#39;</span><span class="p">)</span>
+</span><span class="line">
+</span><span class="line">        <span class="c"># Create the model</span>
+</span><span class="line">        <span class="n">x</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">,</span> <span class="p">[</span><span class="bp">None</span><span class="p">,</span> <span class="mi">784</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s">&#39;x&#39;</span><span class="p">)</span>
+</span><span class="line">        <span class="n">W</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">784</span><span class="p">,</span> <span class="mi">10</span><span class="p">]))</span>
+</span><span class="line">        <span class="n">b</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">Variable</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="mi">10</span><span class="p">]))</span>
+</span><span class="line">        <span class="n">y</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">matmul</span><span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">W</span><span class="p">)</span> <span class="o">+</span> <span class="n">b</span>
+</span><span class="line">
+</span><span class="line">        <span class="c"># Define loss and optimizer</span>
+</span><span class="line">        <span class="n">y_</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">placeholder</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">int32</span><span class="p">,</span> <span class="p">[</span><span class="bp">None</span><span class="p">],</span> <span class="n">name</span><span class="o">=</span><span class="s">&#39;y_&#39;</span><span class="p">)</span>
+</span><span class="line">        <span class="n">cross_entropy</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">losses</span><span class="o">.</span><span class="n">sparse_softmax_cross_entropy</span><span class="p">(</span><span class="n">labels</span><span class="o">=</span><span class="n">y_</span><span class="p">,</span> <span class="n">logits</span><span class="o">=</span><span class="n">y</span><span class="p">)</span>
+</span><span class="line">        <span class="n">train_step</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">GradientDescentOptimizer</span><span class="p">(</span><span class="mf">0.5</span><span class="p">)</span><span class="o">.</span><span class="n">minimize</span><span class="p">(</span><span class="n">cross_entropy</span><span class="p">,</span> <span class="n">name</span><span class="o">=</span><span class="s">&#39;train_step&#39;</span><span class="p">)</span>
+</span><span class="line">
+</span><span class="line">        <span class="c"># Test trained model</span>
+</span><span class="line">        <span class="n">correct_prediction</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">y_</span><span class="p">,</span> <span class="n">tf</span><span class="o">.</span><span class="n">int64</span><span class="p">))</span>
+</span><span class="line">        <span class="n">accuracy</span> <span class="o">=</span> <span class="n">tf</span><span class="o">.</span><span class="n">reduce_mean</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">cast</span><span class="p">(</span><span class="n">correct_prediction</span><span class="p">,</span> <span class="n">tf</span><span class="o">.</span><span class="n">float32</span><span class="p">),</span> <span class="n">name</span><span class="o">=</span><span class="s">&#39;accuracy&#39;</span><span class="p">)</span>
+</span><span class="line">
+</span><span class="line">        <span class="c"># Export the computation graph.</span>
+</span><span class="line">        <span class="n">tf</span><span class="o">.</span><span class="n">train</span><span class="o">.</span><span class="n">write_graph</span><span class="p">(</span><span class="n">tf</span><span class="o">.</span><span class="n">get_default_graph</span><span class="p">()</span><span class="o">.</span><span class="n">as_graph_def</span><span class="p">(),</span> <span class="n">export_dir</span><span class="p">,</span> <span class="s">&#39;mnist_graph.pb&#39;</span><span class="p">,</span> <span class="n">as_text</span><span class="o">=</span><span class="n">as_text</span><span class="p">)</span>
+</span><span class="line">    <span class="k">except</span> <span class="n">Usage</span> <span class="k">as</span> <span class="n">err</span><span class="p">:</span>
+</span><span class="line">        <span class="k">print</span><span class="p">(</span><span class="n">err</span><span class="o">.</span><span class="n">msg</span><span class="p">)</span>
+</span><span class="line">        <span class="n">usage</span><span class="p">(</span><span class="n">argv</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+</span><span class="line">        <span class="k">return</span> <span class="mi">1</span>
+</span><span class="line">    <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+</span><span class="line">        <span class="n">traceback</span><span class="o">.</span><span class="n">print_exc</span><span class="p">()</span>
+</span><span class="line">        <span class="k">return</span> <span class="mi">1</span>
+</span><span class="line">
+</span><span class="line"><span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&#39;__main__&#39;</span><span class="p">:</span>
+</span><span class="line">    <span class="n">main</span><span class="p">()</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<p>创建模型并导出到目录models.</p>
+<figure class="code"><figcaption><span>create_model.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class="python"><span class="line"><span class="err">$</span> <span class="n">create_model</span><span class="o">.</span><span class="n">py</span> <span class="o">--</span><span class="n">export_dir</span><span class="o">=</span><span class="n">models</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<h2 id="section-1">第一种方法：编译共享库</h2>
+
+<p>首先编译Tensorflow的C++共享库<code>libtensorflow_cc.so</code>.</p>
+<figure class="code"><figcaption><span>create_model.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+</pre></td><td class="code"><pre><code class="python"><span class="line"><span class="err">$</span> <span class="n">cd</span> <span class="n">tensorflow</span>              <span class="c"># 进入tensorflow源代码目录</span>
+</span><span class="line"><span class="err">$</span> <span class="o">./</span><span class="n">configure</span>
+</span><span class="line"><span class="err">$</span> <span class="n">bazel</span> <span class="n">build</span> <span class="o">--</span><span class="n">config</span><span class="o">=</span><span class="n">opt</span> <span class="o">//</span><span class="n">tensorflow</span><span class="p">:</span><span class="n">libtensorflow_cc</span><span class="o">.</span><span class="n">so</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<p>下载并编译Tensorflow依赖的外部库。</p>
+<figure class="code"><figcaption><span>create_model.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+</pre></td><td class="code"><pre><code class="python"><span class="line"><span class="err">$</span> <span class="n">cd</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">contrib</span><span class="o">/</span><span class="n">makefile</span>
+</span><span class="line"><span class="err">$</span> <span class="o">./</span><span class="n">build_all_linux</span><span class="o">.</span><span class="n">sh</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<p>安装头文件和共享库。</p>
+<figure class="code"><figcaption><span>create_model.py</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+</pre></td><td class="code"><pre><code class="python"><span class="line"><span class="err">$</span> <span class="n">cp</span> <span class="n">tensorflow</span>
+</span><span class="line"><span class="err">$</span> <span class="n">find</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">core</span> <span class="o">-</span><span class="n">name</span> <span class="s">&#39;*.h&#39;</span> <span class="o">|</span> <span class="n">xargs</span> <span class="o">-</span><span class="n">i</span> <span class="n">cp</span> <span class="o">--</span><span class="n">parents</span> <span class="s">&#39;{}&#39;</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">include</span><span class="o">/</span><span class="n">tf</span>
+</span><span class="line"><span class="err">$</span> <span class="n">cp</span> <span class="o">-</span><span class="n">r</span> <span class="n">bazel</span><span class="o">-</span><span class="n">genfiles</span><span class="o">/*</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">include</span><span class="o">/</span><span class="n">tf</span>
+</span><span class="line"><span class="err">$</span> <span class="n">cp</span> <span class="o">-</span><span class="n">r</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">contrib</span><span class="o">/</span><span class="n">makefile</span><span class="o">/</span><span class="n">gen</span><span class="o">/</span><span class="n">protobuf</span><span class="o">/</span><span class="n">include</span><span class="o">/*</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">include</span><span class="o">/</span><span class="n">tf</span>
+</span><span class="line"><span class="err">$</span> <span class="n">cp</span> <span class="o">-</span><span class="n">r</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">contrib</span><span class="o">/</span><span class="n">makefile</span><span class="o">/</span><span class="n">downloads</span><span class="o">/</span><span class="n">eigen</span><span class="o">/*</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">include</span><span class="o">/</span><span class="n">tf</span>
+</span><span class="line"><span class="err">$</span> <span class="n">cp</span> <span class="o">-</span><span class="n">r</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">contrib</span><span class="o">/</span><span class="n">makefile</span><span class="o">/</span><span class="n">downloads</span><span class="o">/</span><span class="n">nsync</span><span class="o">/</span><span class="n">public</span><span class="o">/*</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">include</span><span class="o">/</span><span class="n">tf</span>
+</span><span class="line"><span class="err">$</span> <span class="n">cp</span> <span class="o">-</span><span class="n">r</span> <span class="n">third_party</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">include</span><span class="o">/</span><span class="n">tf</span>
+</span><span class="line"><span class="err">$</span> <span class="n">cp</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">bazel</span><span class="o">-</span><span class="nb">bin</span><span class="o">/</span><span class="n">tensorflow</span><span class="o">/</span><span class="n">libtensorflow_cc</span><span class="o">.</span><span class="n">so</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">lib</span>
+</span><span class="line"><span class="err">$</span> <span class="n">cp</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">bazel</span><span class="o">-</span><span class="nb">bin</span><span class="o">/</span><span class="n">tensorflow</span><span class="o">/</span><span class="n">libtensorflow_framework</span><span class="o">.</span><span class="n">so</span> <span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">lib</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<p>我们的C++训练代码如下。</p>
+<figure class="code"><figcaption><span>train_model.cpp</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+<span class="line-number">22</span>
+<span class="line-number">23</span>
+<span class="line-number">24</span>
+<span class="line-number">25</span>
+<span class="line-number">26</span>
+<span class="line-number">27</span>
+<span class="line-number">28</span>
+<span class="line-number">29</span>
+<span class="line-number">30</span>
+<span class="line-number">31</span>
+<span class="line-number">32</span>
+<span class="line-number">33</span>
+<span class="line-number">34</span>
+<span class="line-number">35</span>
+<span class="line-number">36</span>
+<span class="line-number">37</span>
+<span class="line-number">38</span>
+<span class="line-number">39</span>
+<span class="line-number">40</span>
+<span class="line-number">41</span>
+<span class="line-number">42</span>
+<span class="line-number">43</span>
+<span class="line-number">44</span>
+<span class="line-number">45</span>
+<span class="line-number">46</span>
+<span class="line-number">47</span>
+<span class="line-number">48</span>
+<span class="line-number">49</span>
+<span class="line-number">50</span>
+<span class="line-number">51</span>
+<span class="line-number">52</span>
+<span class="line-number">53</span>
+<span class="line-number">54</span>
+<span class="line-number">55</span>
+<span class="line-number">56</span>
+<span class="line-number">57</span>
+<span class="line-number">58</span>
+<span class="line-number">59</span>
+<span class="line-number">60</span>
+<span class="line-number">61</span>
+<span class="line-number">62</span>
+<span class="line-number">63</span>
+<span class="line-number">64</span>
+<span class="line-number">65</span>
+<span class="line-number">66</span>
+<span class="line-number">67</span>
+<span class="line-number">68</span>
+<span class="line-number">69</span>
+<span class="line-number">70</span>
+<span class="line-number">71</span>
+<span class="line-number">72</span>
+<span class="line-number">73</span>
+<span class="line-number">74</span>
+<span class="line-number">75</span>
+<span class="line-number">76</span>
+<span class="line-number">77</span>
+<span class="line-number">78</span>
+<span class="line-number">79</span>
+<span class="line-number">80</span>
+<span class="line-number">81</span>
+<span class="line-number">82</span>
+<span class="line-number">83</span>
+<span class="line-number">84</span>
+<span class="line-number">85</span>
+<span class="line-number">86</span>
+<span class="line-number">87</span>
+<span class="line-number">88</span>
+<span class="line-number">89</span>
+<span class="line-number">90</span>
+<span class="line-number">91</span>
+<span class="line-number">92</span>
+<span class="line-number">93</span>
+<span class="line-number">94</span>
+<span class="line-number">95</span>
+<span class="line-number">96</span>
+<span class="line-number">97</span>
+<span class="line-number">98</span>
+<span class="line-number">99</span>
+<span class="line-number">100</span>
+<span class="line-number">101</span>
+<span class="line-number">102</span>
+<span class="line-number">103</span>
+<span class="line-number">104</span>
+<span class="line-number">105</span>
+<span class="line-number">106</span>
+<span class="line-number">107</span>
+<span class="line-number">108</span>
+<span class="line-number">109</span>
+<span class="line-number">110</span>
+<span class="line-number">111</span>
+<span class="line-number">112</span>
+<span class="line-number">113</span>
+<span class="line-number">114</span>
+<span class="line-number">115</span>
+<span class="line-number">116</span>
+<span class="line-number">117</span>
+<span class="line-number">118</span>
+<span class="line-number">119</span>
+<span class="line-number">120</span>
+<span class="line-number">121</span>
+<span class="line-number">122</span>
+<span class="line-number">123</span>
+<span class="line-number">124</span>
+<span class="line-number">125</span>
+<span class="line-number">126</span>
+<span class="line-number">127</span>
+<span class="line-number">128</span>
+<span class="line-number">129</span>
+<span class="line-number">130</span>
+<span class="line-number">131</span>
+<span class="line-number">132</span>
+<span class="line-number">133</span>
+<span class="line-number">134</span>
+<span class="line-number">135</span>
+<span class="line-number">136</span>
+<span class="line-number">137</span>
+<span class="line-number">138</span>
+<span class="line-number">139</span>
+<span class="line-number">140</span>
+<span class="line-number">141</span>
+<span class="line-number">142</span>
+<span class="line-number">143</span>
+<span class="line-number">144</span>
+<span class="line-number">145</span>
+<span class="line-number">146</span>
+<span class="line-number">147</span>
+<span class="line-number">148</span>
+<span class="line-number">149</span>
+<span class="line-number">150</span>
+<span class="line-number">151</span>
+<span class="line-number">152</span>
+<span class="line-number">153</span>
+<span class="line-number">154</span>
+<span class="line-number">155</span>
+<span class="line-number">156</span>
+<span class="line-number">157</span>
+<span class="line-number">158</span>
+<span class="line-number">159</span>
+<span class="line-number">160</span>
+<span class="line-number">161</span>
+<span class="line-number">162</span>
+<span class="line-number">163</span>
+<span class="line-number">164</span>
+<span class="line-number">165</span>
+<span class="line-number">166</span>
+<span class="line-number">167</span>
+<span class="line-number">168</span>
+<span class="line-number">169</span>
+<span class="line-number">170</span>
+<span class="line-number">171</span>
+<span class="line-number">172</span>
+<span class="line-number">173</span>
+<span class="line-number">174</span>
+<span class="line-number">175</span>
+<span class="line-number">176</span>
+<span class="line-number">177</span>
+<span class="line-number">178</span>
+<span class="line-number">179</span>
+<span class="line-number">180</span>
+<span class="line-number">181</span>
+<span class="line-number">182</span>
+<span class="line-number">183</span>
+<span class="line-number">184</span>
+<span class="line-number">185</span>
+<span class="line-number">186</span>
+<span class="line-number">187</span>
+<span class="line-number">188</span>
+<span class="line-number">189</span>
+<span class="line-number">190</span>
+<span class="line-number">191</span>
+<span class="line-number">192</span>
+<span class="line-number">193</span>
+<span class="line-number">194</span>
+<span class="line-number">195</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="cp">#include &lt;arpa/inet.h&gt;</span>
+</span><span class="line"><span class="cp">#include &lt;string&gt;</span>
+</span><span class="line"><span class="cp">#include &lt;vector&gt;</span>
+</span><span class="line"><span class="cp">#include &lt;fstream&gt;</span>
+</span><span class="line"><span class="cp">#include &quot;tensorflow/core/public/session.h&quot;</span>
+</span><span class="line">
+</span><span class="line"><span class="k">using</span> <span class="k">namespace</span> <span class="n">std</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line"><span class="k">class</span> <span class="nc">DataSet</span> <span class="p">{</span>
+</span><span class="line"><span class="k">public</span><span class="o">:</span>
+</span><span class="line">    <span class="n">DataSet</span><span class="p">()</span>
+</span><span class="line">    <span class="p">{}</span>
+</span><span class="line">
+</span><span class="line">    <span class="kt">void</span> <span class="n">LoadDataFromDir</span><span class="p">(</span><span class="k">const</span> <span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&amp;</span> <span class="n">path</span><span class="p">)</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">x_train_file</span> <span class="o">=</span> <span class="s">&quot;train-images-idx3-ubyte&quot;</span><span class="p">;</span>
+</span><span class="line">        <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">y_train_file</span> <span class="o">=</span> <span class="s">&quot;train-labels-idx1-ubyte&quot;</span><span class="p">;</span>
+</span><span class="line">        <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">x_test_file</span> <span class="o">=</span> <span class="s">&quot;t10k-images-idx3-ubyte&quot;</span><span class="p">;</span>
+</span><span class="line">        <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">y_test_file</span> <span class="o">=</span> <span class="s">&quot;t10k-labels-idx1-ubyte&quot;</span><span class="p">;</span>
+</span><span class="line">        <span class="n">m_x_train</span> <span class="o">=</span> <span class="n">ExtractImages</span><span class="p">(</span><span class="n">path</span> <span class="o">+</span> <span class="s">&quot;/&quot;</span> <span class="o">+</span> <span class="n">x_train_file</span><span class="p">);</span>
+</span><span class="line">        <span class="n">m_y_train</span> <span class="o">=</span> <span class="n">ExtractLabels</span><span class="p">(</span><span class="n">path</span> <span class="o">+</span> <span class="s">&quot;/&quot;</span> <span class="o">+</span> <span class="n">y_train_file</span><span class="p">);</span>
+</span><span class="line">        <span class="n">m_x_test</span> <span class="o">=</span> <span class="n">ExtractImages</span><span class="p">(</span><span class="n">path</span> <span class="o">+</span> <span class="s">&quot;/&quot;</span> <span class="o">+</span> <span class="n">x_test_file</span><span class="p">);</span>
+</span><span class="line">        <span class="n">m_y_test</span> <span class="o">=</span> <span class="n">ExtractLabels</span><span class="p">(</span><span class="n">path</span> <span class="o">+</span> <span class="s">&quot;/&quot;</span> <span class="o">+</span> <span class="n">y_test_file</span><span class="p">);</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line">    <span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;&amp;</span> <span class="n">x_train</span><span class="p">()</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="k">return</span> <span class="n">m_x_train</span><span class="p">;</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line">    <span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;&amp;</span> <span class="n">y_train</span><span class="p">()</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="k">return</span> <span class="n">m_y_train</span><span class="p">;</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line">    <span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;&amp;</span> <span class="n">x_test</span><span class="p">()</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="k">return</span> <span class="n">m_x_test</span><span class="p">;</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line">    <span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;&amp;</span> <span class="n">y_test</span><span class="p">()</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="k">return</span> <span class="n">m_y_test</span><span class="p">;</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line"><span class="k">private</span><span class="o">:</span>
+</span><span class="line">    <span class="kt">uint32_t</span> <span class="n">ReadUint32</span><span class="p">(</span><span class="n">ifstream</span><span class="o">&amp;</span> <span class="n">is</span><span class="p">)</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="kt">uint32_t</span> <span class="n">data</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class="line">        <span class="k">if</span> <span class="p">(</span><span class="n">is</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="p">),</span> <span class="mi">4</span><span class="p">))</span> <span class="p">{</span>
+</span><span class="line">            <span class="k">return</span> <span class="n">ntohl</span><span class="p">(</span><span class="n">data</span><span class="p">);</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="k">throw</span> <span class="n">logic_error</span><span class="p">(</span><span class="s">&quot;can&#39;t read 4 bytes&quot;</span><span class="p">);</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line">    <span class="kt">uint8_t</span> <span class="n">ReadUint8</span><span class="p">(</span><span class="n">ifstream</span><span class="o">&amp;</span> <span class="n">is</span><span class="p">)</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="kt">uint8_t</span> <span class="n">data</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class="line">        <span class="k">if</span> <span class="p">(</span><span class="n">is</span><span class="p">.</span><span class="n">read</span><span class="p">(</span><span class="k">reinterpret_cast</span><span class="o">&lt;</span><span class="kt">char</span><span class="o">*&gt;</span><span class="p">(</span><span class="o">&amp;</span><span class="n">data</span><span class="p">),</span> <span class="mi">1</span><span class="p">))</span> <span class="p">{</span>
+</span><span class="line">            <span class="k">return</span> <span class="n">data</span><span class="p">;</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="k">throw</span> <span class="n">logic_error</span><span class="p">(</span><span class="s">&quot;can&#39;t read 1 byte&quot;</span><span class="p">);</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line">    <span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span> <span class="n">ExtractImages</span><span class="p">(</span><span class="k">const</span> <span class="n">string</span><span class="o">&amp;</span> <span class="n">file</span><span class="p">)</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="n">ifstream</span> <span class="n">is</span><span class="p">(</span><span class="n">file</span><span class="p">);</span>
+</span><span class="line">        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">is</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="k">throw</span> <span class="n">logic_error</span><span class="p">(</span><span class="s">&quot;can&#39;t open file: &quot;</span> <span class="o">+</span> <span class="n">file</span><span class="p">);</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="kt">uint32_t</span> <span class="n">magic</span> <span class="o">=</span> <span class="n">ReadUint32</span><span class="p">(</span><span class="n">is</span><span class="p">);</span>
+</span><span class="line">        <span class="k">if</span> <span class="p">(</span><span class="n">magic</span> <span class="o">!=</span> <span class="mi">2051</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="k">throw</span> <span class="n">logic_error</span><span class="p">(</span><span class="s">&quot;bad magic: &quot;</span> <span class="o">+</span> <span class="n">to_string</span><span class="p">(</span><span class="n">magic</span><span class="p">));</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="kt">uint32_t</span> <span class="n">num</span> <span class="o">=</span> <span class="n">ReadUint32</span><span class="p">(</span><span class="n">is</span><span class="p">);</span>
+</span><span class="line">        <span class="kt">uint32_t</span> <span class="n">rows</span> <span class="o">=</span> <span class="n">ReadUint32</span><span class="p">(</span><span class="n">is</span><span class="p">);</span>
+</span><span class="line">        <span class="kt">uint32_t</span> <span class="n">cols</span> <span class="o">=</span> <span class="n">ReadUint32</span><span class="p">(</span><span class="n">is</span><span class="p">);</span>
+</span><span class="line">        <span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span> <span class="n">images</span><span class="p">;</span>
+</span><span class="line">        <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">num</span><span class="o">*</span><span class="n">rows</span><span class="o">*</span><span class="n">cols</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="kt">uint8_t</span> <span class="n">byte</span> <span class="o">=</span> <span class="n">ReadUint8</span><span class="p">(</span><span class="n">is</span><span class="p">);</span>
+</span><span class="line">            <span class="n">images</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span><span class="p">(</span><span class="n">byte</span><span class="p">)</span><span class="o">/</span><span class="mf">255.0</span><span class="p">);</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="k">return</span> <span class="n">images</span><span class="p">;</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line">    <span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">ExtractLabels</span><span class="p">(</span><span class="k">const</span> <span class="n">string</span><span class="o">&amp;</span> <span class="n">file</span><span class="p">)</span>
+</span><span class="line">    <span class="p">{</span>
+</span><span class="line">        <span class="n">ifstream</span> <span class="n">is</span><span class="p">(</span><span class="n">file</span><span class="p">);</span>
+</span><span class="line">        <span class="k">if</span> <span class="p">(</span><span class="o">!</span><span class="n">is</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="k">throw</span> <span class="n">logic_error</span><span class="p">(</span><span class="s">&quot;can&#39;t open file: &quot;</span> <span class="o">+</span> <span class="n">file</span><span class="p">);</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="kt">uint32_t</span> <span class="n">magic</span> <span class="o">=</span> <span class="n">ReadUint32</span><span class="p">(</span><span class="n">is</span><span class="p">);</span>
+</span><span class="line">        <span class="k">if</span> <span class="p">(</span><span class="n">magic</span> <span class="o">!=</span> <span class="mi">2049</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="k">throw</span> <span class="n">logic_error</span><span class="p">(</span><span class="s">&quot;bad magic: &quot;</span> <span class="o">+</span> <span class="n">to_string</span><span class="p">(</span><span class="n">magic</span><span class="p">));</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="kt">uint32_t</span> <span class="n">num</span> <span class="o">=</span> <span class="n">ReadUint32</span><span class="p">(</span><span class="n">is</span><span class="p">);</span>
+</span><span class="line">        <span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">labels</span><span class="p">;</span>
+</span><span class="line">        <span class="k">for</span> <span class="p">(</span><span class="kt">size_t</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">num</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="kt">uint8_t</span> <span class="n">byte</span> <span class="o">=</span> <span class="n">ReadUint8</span><span class="p">(</span><span class="n">is</span><span class="p">);</span>
+</span><span class="line">            <span class="n">labels</span><span class="p">.</span><span class="n">push_back</span><span class="p">(</span><span class="n">byte</span><span class="p">);</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="k">return</span> <span class="n">labels</span><span class="p">;</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">
+</span><span class="line">    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span> <span class="n">m_x_train</span><span class="p">;</span>
+</span><span class="line">    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">m_y_train</span><span class="p">;</span>
+</span><span class="line">    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">double</span><span class="o">&gt;</span> <span class="n">m_x_test</span><span class="p">;</span>
+</span><span class="line">    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span> <span class="n">m_y_test</span><span class="p">;</span>
+</span><span class="line"><span class="p">};</span>
+</span><span class="line">
+</span><span class="line"><span class="k">using</span> <span class="k">namespace</span> <span class="n">tensorflow</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line"><span class="kt">int</span> <span class="nf">main</span><span class="p">(</span><span class="kt">int</span> <span class="n">argc</span><span class="p">,</span> <span class="kt">char</span><span class="o">*</span> <span class="n">argv</span><span class="p">[])</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line">    <span class="n">try</span> <span class="p">{</span>
+</span><span class="line">        <span class="n">string</span> <span class="n">data_dir</span> <span class="o">=</span> <span class="s">&quot;mnist_data&quot;</span><span class="p">;</span>
+</span><span class="line">        <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="n">data_dir</span> <span class="o">=</span> <span class="n">argv</span><span class="p">[</span><span class="mi">1</span><span class="p">];</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="n">DataSet</span> <span class="n">data_set</span><span class="p">;</span>
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;loading data from &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">data_dir</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; ... &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">        <span class="n">data_set</span><span class="p">.</span><span class="n">LoadDataFromDir</span><span class="p">(</span><span class="n">data_dir</span><span class="p">);</span>
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;loading data ... done.&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line">        <span class="c1">// Initialize a tensorflow session</span>
+</span><span class="line">        <span class="n">Session</span><span class="o">*</span> <span class="n">session</span><span class="p">;</span>
+</span><span class="line">        <span class="n">TF_CHECK_OK</span><span class="p">(</span><span class="n">NewSession</span><span class="p">(</span><span class="n">SessionOptions</span><span class="p">(),</span> <span class="o">&amp;</span><span class="n">session</span><span class="p">));</span>
+</span><span class="line">
+</span><span class="line">        <span class="c1">// Read in the protobuf graph we exported</span>
+</span><span class="line">        <span class="c1">// (The path seems to be relative to the cwd. Keep this in mind</span>
+</span><span class="line">        <span class="c1">// when using `bazel run` since the cwd isn&#39;t where you call</span>
+</span><span class="line">        <span class="c1">// `bazel run` but from inside a temp folder.)</span>
+</span><span class="line">        <span class="n">GraphDef</span> <span class="n">graph_def</span><span class="p">;</span>
+</span><span class="line">        <span class="k">const</span> <span class="kt">char</span><span class="o">*</span> <span class="n">graph_path</span> <span class="o">=</span> <span class="s">&quot;mnist_graph.pb&quot;</span><span class="p">;</span>
+</span><span class="line">        <span class="k">if</span> <span class="p">(</span><span class="n">argc</span> <span class="o">&gt;</span> <span class="mi">2</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="n">graph_path</span> <span class="o">=</span> <span class="n">argv</span><span class="p">[</span><span class="mi">2</span><span class="p">];</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;reading graph from &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">graph_path</span> <span class="o">&lt;&lt;</span> <span class="s">&quot; ... &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">        <span class="n">TF_CHECK_OK</span><span class="p">(</span><span class="n">ReadBinaryProto</span><span class="p">(</span><span class="n">Env</span><span class="o">::</span><span class="n">Default</span><span class="p">(),</span> <span class="n">graph_path</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">graph_def</span><span class="p">));</span>
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;reading graph ... done.&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line">        <span class="c1">// Add the graph to the session</span>
+</span><span class="line">        <span class="n">TF_CHECK_OK</span><span class="p">(</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">Create</span><span class="p">(</span><span class="n">graph_def</span><span class="p">));</span>
+</span><span class="line">
+</span><span class="line">        <span class="c1">// Setup inputs and outputs:</span>
+</span><span class="line">        <span class="n">Tensor</span> <span class="n">x_train</span><span class="p">(</span><span class="n">DataTypeToEnum</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;::</span><span class="n">v</span><span class="p">(),</span>
+</span><span class="line">                       <span class="n">TensorShape</span><span class="p">{</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">data_set</span><span class="p">.</span><span class="n">x_train</span><span class="p">().</span><span class="n">size</span><span class="p">())</span><span class="o">/</span><span class="mi">784</span><span class="p">,</span> <span class="mi">784</span><span class="p">});</span>
+</span><span class="line">        <span class="n">copy_n</span><span class="p">(</span><span class="n">data_set</span><span class="p">.</span><span class="n">x_train</span><span class="p">().</span><span class="n">begin</span><span class="p">(),</span> <span class="n">data_set</span><span class="p">.</span><span class="n">x_train</span><span class="p">().</span><span class="n">size</span><span class="p">(),</span> <span class="n">x_train</span><span class="p">.</span><span class="n">flat</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">().</span><span class="n">data</span><span class="p">());</span>
+</span><span class="line">
+</span><span class="line">        <span class="n">Tensor</span> <span class="n">y_train</span><span class="p">(</span><span class="n">DataTypeToEnum</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;::</span><span class="n">v</span><span class="p">(),</span>
+</span><span class="line">                       <span class="n">TensorShape</span><span class="p">{</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">data_set</span><span class="p">.</span><span class="n">y_train</span><span class="p">().</span><span class="n">size</span><span class="p">())});</span>
+</span><span class="line">        <span class="n">copy_n</span><span class="p">(</span><span class="n">data_set</span><span class="p">.</span><span class="n">y_train</span><span class="p">().</span><span class="n">begin</span><span class="p">(),</span> <span class="n">data_set</span><span class="p">.</span><span class="n">y_train</span><span class="p">().</span><span class="n">size</span><span class="p">(),</span> <span class="n">y_train</span><span class="p">.</span><span class="n">flat</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">().</span><span class="n">data</span><span class="p">());</span>
+</span><span class="line">
+</span><span class="line">        <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="n">string</span><span class="p">,</span> <span class="n">tensorflow</span><span class="o">::</span><span class="n">Tensor</span><span class="o">&gt;&gt;</span> <span class="n">inputs</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class="line">            <span class="p">{</span> <span class="s">&quot;x&quot;</span><span class="p">,</span> <span class="n">x_train</span> <span class="p">},</span>
+</span><span class="line">            <span class="p">{</span> <span class="s">&quot;y_&quot;</span><span class="p">,</span> <span class="n">y_train</span> <span class="p">},</span>
+</span><span class="line">        <span class="p">};</span>
+</span><span class="line">
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;init global variables ... &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">        <span class="n">TF_CHECK_OK</span><span class="p">(</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">Run</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="p">{</span> <span class="p">},</span> <span class="p">{</span> <span class="s">&quot;init&quot;</span> <span class="p">},</span> <span class="k">nullptr</span><span class="p">));</span>
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;init ... done.&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;training ... &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">        <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">tensorflow</span><span class="o">::</span><span class="n">Tensor</span><span class="o">&gt;</span> <span class="n">outputs</span><span class="p">;</span>
+</span><span class="line">        <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="mi">100</span><span class="p">;</span> <span class="o">++</span><span class="n">i</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">            <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;step &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">i</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">            <span class="n">TF_CHECK_OK</span><span class="p">(</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">Run</span><span class="p">(</span><span class="n">inputs</span><span class="p">,</span> <span class="p">{},</span> <span class="p">{</span> <span class="s">&quot;train_step&quot;</span> <span class="p">},</span> <span class="k">nullptr</span><span class="p">));</span>
+</span><span class="line">        <span class="p">}</span>
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;training ... done.&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;testing ... &quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">        <span class="n">Tensor</span> <span class="n">x_test</span><span class="p">(</span><span class="n">DataTypeToEnum</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;::</span><span class="n">v</span><span class="p">(),</span>
+</span><span class="line">                      <span class="n">TensorShape</span><span class="p">{</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">data_set</span><span class="p">.</span><span class="n">x_test</span><span class="p">().</span><span class="n">size</span><span class="p">())</span><span class="o">/</span><span class="mi">784</span><span class="p">,</span> <span class="mi">784</span><span class="p">});</span>
+</span><span class="line">        <span class="n">copy_n</span><span class="p">(</span><span class="n">data_set</span><span class="p">.</span><span class="n">x_test</span><span class="p">().</span><span class="n">begin</span><span class="p">(),</span> <span class="n">data_set</span><span class="p">.</span><span class="n">x_test</span><span class="p">().</span><span class="n">size</span><span class="p">(),</span> <span class="n">x_test</span><span class="p">.</span><span class="n">flat</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">().</span><span class="n">data</span><span class="p">());</span>
+</span><span class="line">
+</span><span class="line">        <span class="n">Tensor</span> <span class="n">y_test</span><span class="p">(</span><span class="n">DataTypeToEnum</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;::</span><span class="n">v</span><span class="p">(),</span>
+</span><span class="line">                      <span class="n">TensorShape</span><span class="p">{</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">(</span><span class="n">data_set</span><span class="p">.</span><span class="n">y_test</span><span class="p">().</span><span class="n">size</span><span class="p">())});</span>
+</span><span class="line">        <span class="n">copy_n</span><span class="p">(</span><span class="n">data_set</span><span class="p">.</span><span class="n">y_test</span><span class="p">().</span><span class="n">begin</span><span class="p">(),</span> <span class="n">data_set</span><span class="p">.</span><span class="n">y_test</span><span class="p">().</span><span class="n">size</span><span class="p">(),</span> <span class="n">y_test</span><span class="p">.</span><span class="n">flat</span><span class="o">&lt;</span><span class="kt">int</span><span class="o">&gt;</span><span class="p">().</span><span class="n">data</span><span class="p">());</span>
+</span><span class="line">        <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">pair</span><span class="o">&lt;</span><span class="n">string</span><span class="p">,</span> <span class="n">tensorflow</span><span class="o">::</span><span class="n">Tensor</span><span class="o">&gt;&gt;</span> <span class="n">tests</span> <span class="o">=</span> <span class="p">{</span>
+</span><span class="line">            <span class="p">{</span> <span class="s">&quot;x&quot;</span><span class="p">,</span> <span class="n">x_test</span> <span class="p">},</span>
+</span><span class="line">            <span class="p">{</span> <span class="s">&quot;y_&quot;</span><span class="p">,</span> <span class="n">y_test</span> <span class="p">}</span>
+</span><span class="line">        <span class="p">};</span>
+</span><span class="line">
+</span><span class="line">        <span class="n">TF_CHECK_OK</span><span class="p">(</span><span class="n">session</span><span class="o">-&gt;</span><span class="n">Run</span><span class="p">(</span><span class="n">tests</span><span class="p">,</span> <span class="p">{</span> <span class="s">&quot;accuracy&quot;</span> <span class="p">},</span> <span class="p">{},</span> <span class="o">&amp;</span><span class="n">outputs</span><span class="p">));</span>
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;Accuracy: &quot;</span> <span class="o">&lt;&lt;</span> <span class="o">*</span><span class="n">outputs</span><span class="p">[</span><span class="mi">0</span><span class="p">].</span><span class="n">scalar</span><span class="o">&lt;</span><span class="kt">float</span><span class="o">&gt;</span><span class="p">().</span><span class="n">data</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">        <span class="n">cout</span> <span class="o">&lt;&lt;</span> <span class="s">&quot;testing ... done.&quot;</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line">        <span class="c1">// Free any resources used by the session</span>
+</span><span class="line">        <span class="n">session</span><span class="o">-&gt;</span><span class="n">Close</span><span class="p">();</span>
+</span><span class="line">    <span class="p">}</span> <span class="k">catch</span> <span class="p">(</span><span class="n">exception</span><span class="o">&amp;</span> <span class="n">e</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">        <span class="n">cerr</span> <span class="o">&lt;&lt;</span> <span class="n">e</span><span class="p">.</span><span class="n">what</span><span class="p">()</span> <span class="o">&lt;&lt;</span> <span class="n">endl</span><span class="p">;</span>
+</span><span class="line">        <span class="k">return</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class="line">    <span class="p">}</span>
+</span><span class="line">    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class="line"><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<p>编译训练代码。</p>
+<figure class="code"><figcaption><span>train_model.cpp</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="err">$</span> <span class="n">g</span><span class="o">++</span> <span class="n">train_model</span><span class="p">.</span><span class="n">cpp</span> <span class="o">-</span><span class="n">o</span> <span class="n">train_model</span> <span class="o">-</span><span class="n">I</span><span class="o">/</span><span class="n">usr</span><span class="o">/</span><span class="n">local</span><span class="o">/</span><span class="n">include</span><span class="o">/</span><span class="n">tf</span> <span class="o">-</span><span class="n">ltensorflow_cc</span> <span class="o">-</span><span class="n">ltensorflow_framework</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<p>下载<a href="http://yann.lecun.com/exdb/mnist/">MNIST数据</a>到目录mnist_data并解压，然后运行训练代码。</p>
+<figure class="code"><figcaption><span>train_model.cpp</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="err">$</span> <span class="n">ls</span> <span class="n">mnist_data</span>
+</span><span class="line"><span class="n">t10k</span><span class="o">-</span><span class="n">images</span><span class="o">-</span><span class="n">idx3</span><span class="o">-</span><span class="n">ubyte</span>
+</span><span class="line"><span class="n">t10k</span><span class="o">-</span><span class="n">labels</span><span class="o">-</span><span class="n">idx1</span><span class="o">-</span><span class="n">ubyte</span>
+</span><span class="line"><span class="n">train</span><span class="o">-</span><span class="n">images</span><span class="o">-</span><span class="n">idx3</span><span class="o">-</span><span class="n">ubyte</span>
+</span><span class="line"><span class="n">train</span><span class="o">-</span><span class="n">labels</span><span class="o">-</span><span class="n">idx1</span><span class="o">-</span><span class="n">ubyte</span>
+</span><span class="line"><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">train_model</span> <span class="n">mnist_data</span> <span class="n">models</span><span class="o">/</span><span class="n">mnist_graph</span><span class="p">.</span><span class="n">pb</span>
+</span><span class="line"><span class="n">loading</span> <span class="n">data</span> <span class="n">from</span> <span class="n">mnist_data</span> <span class="p">...</span>
+</span><span class="line"><span class="n">loading</span> <span class="n">data</span> <span class="p">...</span> <span class="n">done</span><span class="p">.</span>
+</span><span class="line"><span class="p">...</span>
+</span><span class="line"><span class="n">training</span> <span class="p">...</span> <span class="n">done</span><span class="p">.</span>
+</span><span class="line"><span class="n">testing</span> <span class="p">...</span>
+</span><span class="line"><span class="nl">Accuracy</span><span class="p">:</span> <span class="mf">0.9012</span>
+</span><span class="line"><span class="n">testing</span> <span class="p">...</span> <span class="n">done</span><span class="p">.</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<h2 id="section-2">第二种方法：编译静态库</h2>
+
+<figure class="code"><figcaption><span>train_model.cpp</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="err">$</span> <span class="n">cd</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">contrib</span><span class="o">/</span><span class="n">makefile</span>
+</span><span class="line"><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">build_all_linux</span><span class="p">.</span><span class="n">sh</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<p>它的原理是利用bazel获取Tensorflow依赖的文件，然后编译链接成静态库。编译的Tensorflow静态库在<code>gen/lib/libtensorflow-core.a</code>. 同样使用上述C++代码，编译训练代码。</p>
+<figure class="code"><figcaption><span>train_model.cpp</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="err">$</span> <span class="n">cd</span> <span class="n">tensorflow</span><span class="o">/</span><span class="n">contrib</span><span class="o">/</span><span class="n">makefile</span>
+</span><span class="line"><span class="err">$</span> <span class="n">g</span><span class="o">++</span> <span class="o">-</span><span class="n">std</span><span class="o">=</span><span class="n">c</span><span class="o">++</span><span class="mi">11</span> <span class="n">train_model</span><span class="p">.</span><span class="n">cpp</span> <span class="o">-</span><span class="n">o</span> <span class="n">train_model</span> \
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="p">..</span><span class="o">/</span><span class="p">..</span><span class="o">/</span><span class="p">..</span> \
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="n">downloads</span><span class="o">/</span> <span class="err">\</span>
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="n">downloads</span><span class="o">/</span><span class="n">eigen</span><span class="o">/</span> \
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="n">downloads</span><span class="o">/</span><span class="n">gemmlowp</span><span class="o">/</span> \
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="n">downloads</span><span class="o">/</span><span class="n">nsync</span><span class="o">/</span><span class="k">public</span><span class="o">/</span> \
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="n">downloads</span><span class="o">/</span><span class="n">fft2d</span><span class="o">/</span>
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="n">gen</span><span class="o">/</span><span class="n">proto</span><span class="o">/</span>
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="n">gen</span><span class="o">/</span><span class="n">proto_text</span><span class="o">/</span>
+</span><span class="line"><span class="o">-</span><span class="n">I</span> <span class="n">gen</span><span class="o">/</span><span class="n">protobuf</span><span class="o">-</span><span class="n">host</span><span class="o">/</span><span class="n">include</span><span class="o">/</span> \
+</span><span class="line"><span class="o">-</span><span class="n">Wl</span><span class="p">,</span><span class="o">--</span><span class="n">allow</span><span class="o">-</span><span class="n">multiple</span><span class="o">-</span><span class="n">definition</span> \
+</span><span class="line"><span class="o">-</span><span class="n">Wl</span><span class="p">,</span><span class="o">--</span><span class="n">whole</span><span class="o">-</span><span class="n">archive</span> <span class="n">gen</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">libtensorflow</span><span class="o">-</span><span class="n">core</span><span class="p">.</span><span class="n">a</span> <span class="o">-</span><span class="n">Wl</span><span class="p">,</span><span class="o">--</span><span class="n">no</span><span class="o">-</span><span class="n">whole</span><span class="o">-</span><span class="n">archive</span> \
+</span><span class="line"><span class="n">downloads</span><span class="o">/</span><span class="n">nsync</span><span class="o">/</span><span class="n">builds</span><span class="o">/</span><span class="k">default</span><span class="p">.</span><span class="n">linux</span><span class="p">.</span><span class="n">c</span><span class="o">++</span><span class="mi">11</span><span class="o">/</span><span class="n">nsync</span><span class="p">.</span><span class="n">a</span> \
+</span><span class="line"><span class="n">gen</span><span class="o">/</span><span class="n">protobuf</span><span class="o">-</span><span class="n">host</span><span class="o">/</span><span class="n">lib</span><span class="o">/</span><span class="n">libprotobuf</span><span class="p">.</span><span class="n">a</span> <span class="o">-</span><span class="n">lz</span> <span class="o">-</span><span class="n">lm</span> <span class="o">-</span><span class="n">ldl</span> <span class="o">-</span><span class="n">lpthread</span> <span class="o">-</span><span class="n">lstdc</span><span class="o">++</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<p>运行模型：</p>
+<figure class="code"><figcaption><span>train_model.cpp</span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">train_model</span> <span class="n">mnist_data</span> <span class="n">models</span><span class="o">/</span><span class="n">mnist_graph</span><span class="p">.</span><span class="n">pb</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>如果运行时报错说有些操作没有注册，这需要将相应的操作源代码文件（在<code>tensorflow/core/kernels/</code>下）放到<code>tf_op_files.txt</code>中重新编译。</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2018-01-13T21:14:48+08:00'><span class='date'>2018-01-13</span> <span class='time'>9:14 pm</span></time>
+      
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2018/01/03/cluster-membership-protocol/" title="Previous Post: 分布式系统的分区管理">&laquo; 分布式系统的分区管理</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2018/02/06/build-independent-tensorflow-serving-library/" title="Next Post: 编译独立的Tensorflow Serving库">编译独立的Tensorflow Serving库 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

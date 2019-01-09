@@ -1,0 +1,393 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>TCP FAQ - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="什么是MSS(Maximum Segment Size)? TCP用MSS选项允许接收方指定它可以接收的最大段长度。传输的双方通过这个选项协商
+出一个上方都接受的最大段长。这个值太大或太小都不好。太小使得每次传输的净荷数
+据太少，带宽使用率不高。太大会使得IP帧太大。 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/02/03/tcp-faq/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">TCP FAQ</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="mssmaximum-segment-size">什么是MSS(Maximum Segment Size)?</h2>
+
+<p>TCP用MSS选项允许接收方指定它可以接收的最大段长度。传输的双方通过这个选项协商
+出一个上方都接受的最大段长。这个值太大或太小都不好。太小使得每次传输的净荷数
+据太少，带宽使用率不高。太大会使得IP帧太大。这样的帧碰到具有较小的MTU的网络
+时不得不分片。这些片段中只要有一个超时都会导致整个帧重传。重传的概率随片段的
+增加而增加。MSS最好等于路径MTU（path MTU）。
+<!--more--></p>
+
+<h2 id="isn">初始序列号（ISN）如何选择？</h2>
+
+<p>The protocol places no restriction on a particular connection being used
+over and over again.  A connection is defined by a pair of sockets.  New
+instances of a connection will be referred to as incarnations of the
+connection.  The problem that arises from this is – “how does the TCP
+identify duplicate segments from previous incarnations of the
+connection?”; This problem becomes apparent if the connection is being
+opened and closed in quick succession, or if the connection breaks with
+loss of memory and is then reestablished.</p>
+
+<p>To avoid confusion we must prevent segments from one incarnation of a
+connection from being used while the same sequence numbers may still be
+present in the network from an earlier incarnation.  We want to assure
+this, even if a TCP crashes and loses all knowledge of the sequence numbers
+it has been using.  When new connections are created, an initial sequence
+number (ISN) generator is employed which selects a new 32 bit ISN.  The
+generator is bound to a (possibly fictitious) 32 bit clock whose low order
+bit is incremented roughly every 4 microseconds.  Thus, the ISN cycles
+approximately every 4.55 hours.  Since we assume that segments will stay in
+the network no more than the Maximum Segment Lifetime (MSL) and that the
+MSL is less than 4.55 hours we can reasonably assume that ISN’s will be
+unique.</p>
+
+<p>See p. 26 of [RFC793].</p>
+
+<h2 id="timewait">为什么要有TIME_WAIT状态？</h2>
+
+<p>有两个原因：</p>
+
+<ol>
+  <li>可靠地关闭TCP连接。考虑一下，若最后一个ACK帧丢失了，B会超时重传。A必须记
+住这个状态信息，以重传最后的ACK。若A没有这个状态信息，它会传送RST。这会被B解
+释为一个错误。若TCP要干净地关闭连接，它就必须正确地处理最后四个帧中任意一个
+帧的丢失。</li>
+  <li>使老的重复帧消失在网络中。TIME_WAIT状态的持续时间是MSL的2倍。TIME_WAIT状
+态过后会保证最后2个帧从网络中消失。这样若重新建立这个连接，可以保证上一次连
+接的老数据不会冒出来干扰这次连接。</li>
+</ol>
+
+<p>见[UNPv13e]的44页。</p>
+
+<h2 id="section">如何处理拥塞？</h2>
+
+<p>TCP维护2个窗口：接收方允许的窗口和拥塞窗口。最终允许发送的大小是这两个窗口的
+较小值。拥塞窗口的大小由慢启动算法计算。它还用了第三个参数，阈值。当新建立一
+个连接时，拥塞窗口初始化为MSS。每次成功传输成功后，拥塞窗口加MSS。第一次传输
+一个数据段，成功后拥塞窗口增加为2个MSS。然后发送两个数据段，若这两个都成功了，
+拥塞窗口增加为4个MSS。实际上，每批被确认的数据都使拥塞窗口加倍。不过，当增加
+到阈值时便停止。从这个点开始仅线性增加，每一批确认只增加一个MSS。每当有超时
+时将阈值设为原来的一半，并将拥塞窗口重新设为MSS，重新开始慢启动算法。</p>
+
+<p>见[Tanenbaum]的6.5.9节。</p>
+
+<h2 id="out-of-band-data">什么是带外数据（Out of band data）？</h2>
+
+<p>有时候用户需要发送紧急信息给对方，即使对方还没有处理完缓存中的数据或对方的接
+收允许窗口为0（advertised window of 0）时。例如在远程登录会话中，用户可能会
+发送中断信号以关闭程序，而这时程序也许正等待输入。该中断信号必须马上发送而不
+是等待程序执行完毕。这就需要用到带外数据。带外数据主要是用于这种远程交互式程
+序中，如telnet，ssh等。</p>
+
+<p>当需要发送紧急数据时，TCP可以让发送者将数据标记为紧急的，设置URG code bit和
+URGENT POINTER。URGENT POINTER指向紧急数据结束的地方，也就是说该点之前的数据
+为紧急数据。URGENT POINTER前一个字节称为<strong>带外字节</strong>（Out
+ofband byte，OOB)。接收方一旦收到标有URG的数据段时便通知应用程序进入紧急模式，
+并在收完紧急数据后通知应用程序进入常规模式。至于如何通知的具体细节取决于操作
+系统。详情见[UNPv13e]第24章。</p>
+
+<h2 id="silly-window-syndrome">何谓愚笨窗口综合症（Silly Window Syndrome）及如何解决？</h2>
+
+<p>愚笨窗口综合症有2种变现形式：接收方愚笨窗口综合症和发送方愚笨窗口综合症。</p>
+
+<p>考虑以下情形。当接收方的接收缓存满时，它会通知对方它的接收允许窗口为0，使发
+送方不要再继续发送数据。这时接收应用程序从接收缓存中读入一个字节，那么就空出
+了一个字节的空间。接收TCP马上告知对方它的接收允许窗口为1。发送方因此发送1字
+节的数据给接收方。这样，每当接收应用程序读取1字节数据时都会触发发送方发送1字
+节数据。显然每一个数据段仅携带如此少的用户数据是相当低效的。这就是接收方愚笨
+窗口综合症。</p>
+
+<p>和接收方一样，发送方也会产生这个问题。如果发送方每次只生成少量的数据，发送
+TCP就会传输一个携带少量用户数据的数据段。这就是发送方愚笨窗口综合症。</p>
+
+<p>要避免这个问题可以采用很简单的启发式方法。当接收方有少量的可用缓存时，不要急
+着增加接收允许窗口。同样，当发送方有少量的数据要发送时，也不要急着发送，等到
+数据足够多时再发送。</p>
+
+<blockquote>
+  <p><em>Receive-side Silly Window Avoidance</em>: Before sending an updated window
+advertisement after advertising a zero window, wait for space to become
+available that is either at least 50% of the total buffer size or equal to
+a maximum sized segment.</p>
+</blockquote>
+
+<blockquote>
+  <p><em>Send-side Silly Window Avoidance</em>: When a sending application generates
+additional data to be sent over a connection for which previous data has
+been transmitted but not acknowledged, place the new data in the output
+buffer as usual, but do not send additional segments until there is
+sufficient data to fill a maximum-sized segment. If still waiting to
+send when an acknowledgement arrives, send all data that has accumulated in
+the buffer. Apply the rule even when the user requests a push
+operation.</p>
+</blockquote>
+
+<p>发送方愚笨窗口综合症避免算法又称为<strong>Nagle算法</strong>。它非常优美简洁，
+而且是自适应的。它延迟发送的时间取决于网络的当前性能，因此能自适应于慢速的和
+快速的网络。另见[Comer]的12.32，12.33。</p>
+
+<p>当然有时候这个算法是我们所不希望的。在远程交互式程序中，用户希望每敲入一个字
+符都能立即发送到服务器上去，而不是等待这个字符被确认后才能发送下一个字符。可
+以通过一个TCP选项禁用Nagle算法。详情见[UNPv13e]的7.9节。</p>
+
+<h2 id="section-1">参考文献</h2>
+
+<ul>
+  <li>[RFC793] <em>Transmission Control Protocol</em>.</li>
+  <li>[Comer] Douglas E. Comer. <em>Internetworking with TCP/IP</em>, Vol. 1, Fifth Edition.</li>
+  <li>[UNPv13e] Richard Stevens, Bill Fenner and Andrew M. Rudoff. <em>UNIX Network Programming</em>, Vol. 1, Third Edition.</li>
+  <li>[Tanenbaum] Andrew S. Tanenbaum. <em>Compuer Networks</em>, Fourth Edition.</li>
+</ul>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/computer-network/'>computer network</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/02/03/print-helix-matrix/" title="Previous Post: 打印螺旋矩阵">&laquo; 打印螺旋矩阵</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/05/13/c-gotchas/" title="Next Post: C gotchas">C gotchas &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,352 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>打印螺旋矩阵 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="螺旋矩阵是一个nxn的方阵，其中元素为自然数，但像螺旋方向一样递增。举例如下： 若n = 3，螺旋矩阵为： 1 2 3 8 9 4 7 6 5 若n = 4，螺旋矩阵为： 1 2 3 4
+12 13 14 5
+11 16 15 6
+10 9 8 7 若n = 5，螺旋矩阵是： 1 2 3 4 5 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/02/03/print-helix-matrix/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">打印螺旋矩阵</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>螺旋矩阵是一个nxn的方阵，其中元素为自然数，但像螺旋方向一样递增。举例如下：</p>
+
+<p>若n = 3，螺旋矩阵为：
+    1   2   3
+    8   9   4
+    7   6   5
+<!--more--></p>
+
+<p>若n = 4，螺旋矩阵为：</p>
+
+<pre><code> 1   2   3   4
+12  13  14   5
+11  16  15   6
+10   9   8   7
+</code></pre>
+
+<p>若n = 5，螺旋矩阵是：</p>
+
+<pre><code> 1   2   3   4   5
+16  17  18  19   6
+15  24  25  20   7
+14  23  22  21   8
+13  12  11  10   9
+</code></pre>
+
+<p>那么如何打印这样的矩阵呢？当然它的规律很简单，直接的方法就是先申请一个矩阵，
+然后按螺旋方向填入相应的元素，填充完毕后再打印出来。它的时间复杂度为
+O(n<sup>2</sup>)，已经是最优的（为什么？）。空间复杂度也为O(n<sup>2</sup>）。
+似乎已经很好了。</p>
+
+<p>但是还不够好。</p>
+
+<p>按照矩阵规律填充元素时，我们是随机访问矩阵元素的（如果可以按顺序访问，根本不
+用先存起来再打印）。随机访问内存，效率当然不高。所以即使时间复杂度已为最优，
+但那只是理论上的最优，在实践中表现并不一定就好。</p>
+
+<p>假如能根据行列号直接计算出对应的矩阵元素就好了。当n给定后，这个矩阵就已经唯
+一确定了，那么每一个元素也是确定的。也就是说，每一个位置放什么元素仅仅取决于
+n。因此我们可以找到一个函数<code>element(i, j)</code>，将行号i和列号j映
+射成对应这个行列号的元素。当然这个函数肯定不是一个简单的函数，不是一眼就可以
+看出来的，但也并不是不可能。</p>
+
+<p>现在我们就来考查一下这个矩阵有什么特点。注意观察一下螺旋矩阵的最外层，它的左
+上角的元素是最小的，然后沿顺时针方向递增，就如同一个环一样（比如n为4时，1,
+2, …, 12就是最外面一层环）。再注意一下里面一层，也是一样，顺时针方向递增的
+一个环（比如n为4时，13, 14, 15, 16就是里面一层环）。以此类推，环里面还有一层
+环（n为4时有2层环，n为5时有3层环，最里面一层只有一个元素25），实际上是一个圆
+环套圆环结构。每一圆环最关键的元素就是左上角的那一个元素。只要知道了这个元素，
+再加上这个正方形环的边长就可以计算出剩下的元素。设左上角元素为a，边长为
+l（ell），也就是边上有几个元素，并假设左上角的行号和列号均为0，其它元素的行
+号和列号都以它作参考，计算方法如下所示：</p>
+
+<ol>
+  <li>若i == 0，element(i, j) = a + j;</li>
+  <li>否则若j == 0，element(i, j) = a + 4(l-4) - (i-1) - 1;</li>
+  <li>否则若i == l-1，element(i, j) = a + 4(l-4) - (l-2) - 1 - j;</li>
+  <li>否则element(i, j) = a + l - 1 + i;</li>
+</ol>
+
+<p>剩下的问题就是如何确定左上角的元素，以及当前环在第几层（最外层是第0层，往里面依次递增）。这些都好办。代码如下：</p>
+
+<pre><code class="language-c">int matrix(int i, int j, int n)
+{
+     int m, a, l;
+     m = min(min(i, n-1-i), min(j, n-1-j));   // 当前环在第几层。
+     i -= m;      // 换算成相对于当前层左上角元素的行列号。
+     j -= m;
+     a = 1 + 4*m*(n-m);        // 计算左上角元素。
+     l = n - 2*m;                   // 当前环的边长。
+     if (i == 0)
+          return a+j;
+     else if (j == 0)
+          return a + 4*(l-1) - i;
+     else if (i == l-1)
+          return a + 4*l - 3 - l - j;
+     /* else j == m-1 */
+     return a + l-1 + i;
+}
+</code></pre>
+
+<p>其实这种方法不仅可以用于这种矩阵，对于其它有各种规律的矩阵也可以用这种方法，
+关键是找出那个函数的定义。推而广之，许多问题实际上在数学上都可以找到这种简单
+答案（所谓简单答案，我指的是类似于级数求和的闭式（closed form），不用递归或
+循环计算出答案，而是在有限的步骤之内算出答案。所谓有限是指与问题规模无关。像
+上面的问题，计算步骤就与矩阵元素个数无关），我们应当尽量地去找这种简单的答案，
+而不是用计算机模拟求解。比如约瑟夫（Josephus）环问题，有一个漂亮的简单答案，
+在常量时间内算出，根本不需用链表或数组模拟。当然，也有许多问题没有这么漂亮的
+解法，只好用计算机模拟求解，不过最好还是尽量想办法找到这种简单的解法。</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/programming-practice/'>programming practice</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/02/03/notes-on-tcp/" title="Previous Post: TCP协议浅析">&laquo; TCP协议浅析</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/02/03/tcp-faq/" title="Next Post: TCP FAQ">TCP FAQ &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

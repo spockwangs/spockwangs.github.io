@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Web Programming | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/web-programming/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[CSS Best Practice]]></title>
+    <link href="http://spockwangs.github.io/blog/2013/03/13/css-best-practice/"/>
+    <updated>2013-03-13T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2013/03/13/css-best-practice</id>
+    <content type="html"><![CDATA[<h2 id="use-a-reset-styelsheet">Use a reset styelsheet</h2>
+
+<p>Reset规则可以消除不同浏览器的差异，比较流行的reset规则有<a href="http://meyerweb.com/eric/tools/css/reset/index.html">Meyer Reset</a>和<a href="http://developer.yahoo.com/yui/reset/">Yahoo Reset</a>.
+<!--more--></p>
+
+<h2 id="categorize-css-rules">Categorize CSS Rules</h2>
+
+<p>将样式规则分类，不同类型的样式采用不同的CSS规则描述，以方便阅读、理解和复用，
+见<a href="http://smacss.com/book/">Scalable and Modular Architecture for CSS</a>.</p>
+
+<h2 id="use-object-oriented-css">Use Object-Oriented CSS</h2>
+
+<p>面向对象的CSS的两条基本原则是：</p>
+
+<ul>
+  <li>将结构和皮肤分开</li>
+  <li>将容器和内容分开</li>
+</ul>
+
+<p>遵循面向对象的原则可以使代码更加模块化和可重用。见<a href="https://github.com/stubbornella/oocss/wiki">OOCSS</a>.</p>
+
+<h2 id="use-margin-0-auto-to-center-layouts">Use “margin: 0 auto” to Center Layouts</h2>
+
+<p>Inline元素用<code>text-align: center</code>居中对齐，但是block元素没有对应的CSS属性。</p>
+
+<h2 id="use-text-transform">Use Text-transform</h2>
+
+<p><code>text-transform</code>有以下几个属性：</p>
+
+<ul>
+  <li>capitalize: 每个单词的首字母大写</li>
+  <li>uppercase: 全部大写</li>
+  <li>lowercase: 全部小写</li>
+</ul>
+
+<h2 id="use-em-as-the-unit-of-font-size">Use em as the unit of font size</h2>
+
+<p>See <a href="http://webdesign.about.com/cs/typemeasurements/a/aa042803a.htm">http://webdesign.about.com/cs/typemeasurements/a/aa042803a.htm</a>.</p>
+
+<h2 id="understanding-css-selector-performance">Understanding CSS selector performance</h2>
+
+<p>复杂的CSS选择符会使浏览器耗用更多的时间计算一条CSS规则是否匹配一个元素，因
+此为了让浏览器更快地渲染页面我们应该使用仅可能简单的选择符。</p>
+
+<ol>
+  <li>使用单个选择符；</li>
+  <li>使用子选择符；</li>
+  <li>避免使用常见的标签名作选择符。</li>
+</ol>
+
+<p>See <a href="http://smacss.com/book/selectors">“Selector Performance”</a>, and
+<a href="https://developer.mozilla.org/en-US/docs/CSS/Writing_Efficient_CSS">“Writing Efficient CSS”</a>.</p>
+]]></content>
+  </entry>
+  
+</feed>

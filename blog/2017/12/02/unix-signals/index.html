@@ -1,0 +1,505 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>UNIX信号 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Introduction UNIX信号在编程中用的不多，但是对于长时间运行的程序还是很有用的，比如通知程序重新加载配置文件、提早退
+出打印一些信息、监控子进程是否还活着。 本文将澄清UNIX信号的概念，使用信号的注意事项及常用的编程模式。 UNIX信号的概念 当触发信号产生的事件发生时（如硬件异常 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2017/12/02/unix-signals/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">UNIX信号</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2017-12-02T20:27:41+08:00'><span class='date'>2017-12-02</span> <span class='time'>8:27 pm</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h1 id="introduction">Introduction</h1>
+
+<p>UNIX信号在编程中用的不多，但是对于长时间运行的程序还是很有用的，比如通知程序重新加载配置文件、提早退
+出打印一些信息、监控子进程是否还活着。</p>
+
+<p>本文将澄清UNIX信号的概念，使用信号的注意事项及常用的编程模式。
+<!--more--></p>
+
+<h1 id="unix">UNIX信号的概念</h1>
+
+<p>当触发信号产生的事件发生时（如硬件异常、定时器过期、终端命令或者调用<code>kill()</code>发送信号），信号将发送给
+相关进程或线程。当产生信号时将决定该信号时发送给进程或进程中的某个线程。如果信号的产生原因与线程有关
+（如该线程产生了内存访问异常），则发送给该线程；否则，发送给该进程（例如，终端活动）。</p>
+
+<p>信号产生后，如果没有被阻塞，则投递（deliver）给相关进程或线程执行对应的动作，或者被接受（accept，调用<code>sigwait()</code>系列函数）。</p>
+
+<p>在线程产生到投递之间，信号处于未决状态（pending）。信号在投递前也可以被阻塞。发送给线程的信号，如果被
+阻塞，且该信号的相关动作不是忽略，则该信号将一直处于未决状态，直到：1）解除阻塞；2）被接受；3）其相关
+动作设置为忽略。发送给进程的信号，将发送给愿意接受该信号或没有阻塞该信号的线程处理；如果没有这样的线程
+则一直处于阻塞状态，直到被某个线程：1）解除阻塞；2）接受；3）设置为忽略该信号。如果发送给进程的信号被
+阻塞且其相关动作是忽略时，该信号是否直接丢弃还是处于未决状态是不确定的。</p>
+
+<p>POSIX标准并没有要求信号可以排队，所以一个未决信号重复产生时可能只会投递或接受一次。另外，多个未决信号
+在投递或接受时的顺序也是不确定的。</p>
+
+<p>每个信号都有一个与之关联的动作，如下3种：</p>
+
+<ul>
+  <li>默认
+    <ul>
+      <li>默认动作由系统在程序启动时设置好。注意：有些信号的默认动作是调用<code>_exit()</code>终止程序。</li>
+    </ul>
+  </li>
+  <li>忽略
+    <ul>
+      <li>注意：<code>SIGKILL</code>和<code>SIGSTOP</code>是不能设置为忽略的。</li>
+    </ul>
+  </li>
+  <li>用户自定义函数
+    <ul>
+      <li>用户可设置自定义函数捕获一个信号，但是<code>SIGKILL</code>和<code>SIGSTOP</code>是无法捕获的。另外，<code>SIGSEGV</code>，<code>SIGILL</code>，
+<code>SIGBUS</code>和<code>SIGFPE</code>的捕获函数必须终止程序而不能正常返回。</li>
+      <li>捕获函数的实现必须保证信号安全。</li>
+    </ul>
+  </li>
+</ul>
+
+<h1 id="section">信号安全</h1>
+
+<p>POSIX要求信号的捕获函数必须满足以下要求：</p>
+
+<ul>
+  <li>只能访问<code>errno</code>、<code>volatile sig_atomic_t</code>类型的全局变量或者原子类型的全局变量。</li>
+  <li>只能调用规定的信号安全函数。</li>
+  <li>注意保存和恢复<code>errno</code>.</li>
+</ul>
+
+<p>所以说信号的捕获函数很难实现复杂的逻辑，甚至打印消息也不行（<code>printf()</code>不是信号安全的）。只能通过
+原子变量传递一些简单的信息，线程条件变量和锁都不能用（使用线程锁可能导致死锁）。</p>
+
+<h1 id="section-1">如何注册信号处理函数</h1>
+
+<p>系统提供了两个API注册信号处理函数，简单的版本定义如下：</p>
+
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="k">typedef</span> <span class="nf">void</span> <span class="p">(</span><span class="o">*</span><span class="kt">sig_t</span><span class="p">)</span> <span class="p">(</span><span class="kt">int</span><span class="p">);</span>
+</span><span class="line">
+</span><span class="line"><span class="kt">sig_t</span> <span class="nf">signal</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">,</span> <span class="kt">sig_t</span> <span class="n">func</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>注册一个函数，并返回之前注册的函数。当信号投递后信号处理函数执行期间，该信号将被阻塞直到执行完毕，
+防止信号重入。</p>
+
+<p>复杂的版本定义如下，可设置信号处理有关的更多属性。</p>
+
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="k">struct</span> <span class="n">sigaction</span> <span class="p">{</span>
+</span><span class="line">    <span class="k">union</span> <span class="n">__sigaction_u</span> <span class="n">__sigaction_u</span><span class="p">;</span>  <span class="cm">/* signal handler */</span>
+</span><span class="line">    <span class="kt">sigset_t</span> <span class="n">sa_mask</span><span class="p">;</span>               <span class="cm">/* signal mask to apply */</span>
+</span><span class="line">    <span class="kt">int</span>     <span class="n">sa_flags</span><span class="p">;</span>               <span class="cm">/* see signal options below */</span>
+</span><span class="line"><span class="p">};</span>
+</span><span class="line">
+</span><span class="line"><span class="k">union</span> <span class="n">__sigaction_u</span> <span class="p">{</span>
+</span><span class="line">     <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">__sa_handler</span><span class="p">)(</span><span class="kt">int</span><span class="p">);</span>
+</span><span class="line">     <span class="kt">void</span> <span class="p">(</span><span class="o">*</span><span class="n">__sa_sigaction</span><span class="p">)(</span><span class="kt">int</span><span class="p">,</span> <span class="kt">siginfo_t</span> <span class="o">*</span><span class="p">,</span> <span class="kt">void</span> <span class="o">*</span><span class="p">);</span>
+</span><span class="line"><span class="p">};</span>
+</span><span class="line">
+</span><span class="line"><span class="cp">#define sa_handler      __sigaction_u.__sa_handler</span>
+</span><span class="line"><span class="cp">#define sa_sigaction    __sigaction_u.__sa_sigaction</span>
+</span><span class="line">
+</span><span class="line"><span class="kt">int</span> <span class="nf">sigaction</span><span class="p">(</span><span class="kt">int</span> <span class="n">sig</span><span class="p">,</span> <span class="k">const</span> <span class="k">struct</span> <span class="n">sigaction</span> <span class="o">*</span><span class="kr">restrict</span> <span class="n">act</span><span class="p">,</span> <span class="k">struct</span> <span class="n">sigaction</span> <span class="o">*</span><span class="kr">restrict</span> <span class="n">oact</span><span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>这个API相比于上面的简单版本可以设置信号处理函数执行期间是否阻塞其它信号，或者当信号中断一个慢速的IO
+时是否自动重新执行IO，细节可参考<code>sigaction(2)</code>.</p>
+
+<h1 id="section-2">信号处理的编程模式</h1>
+
+<p>信号处理函数的要求非常严格，除了设置原子变量外也做不了其它事情，下面举一个简单的例子用终端产生信号让
+程序提前结束。</p>
+
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="cp">#include &lt;unistd.h&gt;</span>
+</span><span class="line"><span class="cp">#include &lt;signal.h&gt;</span>
+</span><span class="line"><span class="cp">#include &lt;thread&gt;</span>
+</span><span class="line">
+</span><span class="line"><span class="k">volatile</span> <span class="kt">sig_atomic_t</span> <span class="n">g_quit</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line"><span class="kt">void</span> <span class="nf">stop</span><span class="p">(</span><span class="kt">int</span><span class="p">)</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line">    <span class="n">g_quit</span> <span class="o">=</span> <span class="mi">1</span><span class="p">;</span>
+</span><span class="line"><span class="p">}</span>
+</span><span class="line">
+</span><span class="line"><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line">    <span class="n">signal</span><span class="p">(</span><span class="n">SIGINT</span><span class="p">,</span> <span class="n">stop</span><span class="p">);</span>
+</span><span class="line">    <span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([]()</span> <span class="p">{</span>
+</span><span class="line">                    <span class="k">while</span> <span class="p">(</span><span class="o">!</span><span class="n">g_quit</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">                        <span class="n">sleep</span><span class="p">(</span><span class="mi">1</span><span class="p">);</span>
+</span><span class="line">                    <span class="p">}</span>
+</span><span class="line">                <span class="p">}).</span><span class="n">join</span><span class="p">();</span>
+</span><span class="line">    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class="line"><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>通知线程退出的前提是该线程周期性检测是否需要退出。但是在比较复杂的场景下，周期检测并不可取，
+需要采取更复杂的通信机制来通知线程退出，比如条件变量，但是信号处理函数是不能操作条件变量的，
+怎么通知呢？</p>
+
+<p>回忆一下，信号除了投递调用信号处理函数外还可以被线程主动接受，这样我们可以实现任意复杂的逻辑。
+创建一个线程专门接受信号，而其它所有线程都阻塞这些信号，由这个专用线程来实现通知逻辑。</p>
+
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+<span class="line-number">22</span>
+<span class="line-number">23</span>
+<span class="line-number">24</span>
+<span class="line-number">25</span>
+<span class="line-number">26</span>
+<span class="line-number">27</span>
+<span class="line-number">28</span>
+<span class="line-number">29</span>
+<span class="line-number">30</span>
+<span class="line-number">31</span>
+<span class="line-number">32</span>
+<span class="line-number">33</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="cp">#include &lt;thread&gt;</span>
+</span><span class="line"><span class="cp">#include &lt;signal.h&gt;</span>
+</span><span class="line"><span class="cp">#include &lt;mutex&gt;</span>
+</span><span class="line"><span class="cp">#include &lt;condition_variable&gt;</span>
+</span><span class="line">
+</span><span class="line"><span class="kt">int</span> <span class="nf">main</span><span class="p">()</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line">    <span class="c1">// Block SIGINT for all threads.  The subsequently created threads</span>
+</span><span class="line">    <span class="c1">// will inherit this mask.</span>
+</span><span class="line">    <span class="kt">sigset_t</span> <span class="n">set</span><span class="p">;</span>
+</span><span class="line">    <span class="n">sigemptyset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">set</span><span class="p">);</span>
+</span><span class="line">    <span class="n">sigaddset</span><span class="p">(</span><span class="o">&amp;</span><span class="n">set</span><span class="p">,</span> <span class="n">SIGINT</span><span class="p">);</span>
+</span><span class="line">    <span class="n">pthread_sigmask</span><span class="p">(</span><span class="n">SIG_BLOCK</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">set</span><span class="p">,</span> <span class="nb">NULL</span><span class="p">);</span>
+</span><span class="line">
+</span><span class="line">    <span class="n">std</span><span class="o">::</span><span class="n">condition_variable</span> <span class="n">cv</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line">    <span class="c1">// Start a thread dedicated to process signals.</span>
+</span><span class="line">    <span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span>
+</span><span class="line">                    <span class="kt">int</span> <span class="n">sig</span><span class="p">;</span>
+</span><span class="line">                    <span class="n">sigwait</span><span class="p">(</span><span class="o">&amp;</span><span class="n">set</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">sig</span><span class="p">);</span>
+</span><span class="line">                    <span class="k">if</span> <span class="p">(</span><span class="n">sig</span> <span class="o">==</span> <span class="n">SIGINT</span><span class="p">)</span> <span class="p">{</span>
+</span><span class="line">                        <span class="n">cv</span><span class="p">.</span><span class="n">notify_one</span><span class="p">();</span>
+</span><span class="line">                    <span class="p">}</span>
+</span><span class="line">                <span class="p">}).</span><span class="n">detach</span><span class="p">();</span>
+</span><span class="line">
+</span><span class="line">    <span class="c1">// The worker thread.</span>
+</span><span class="line">    <span class="n">std</span><span class="o">::</span><span class="kr">thread</span><span class="p">([</span><span class="o">&amp;</span><span class="p">]</span> <span class="p">{</span>
+</span><span class="line">                    <span class="n">std</span><span class="o">::</span><span class="n">mutex</span> <span class="n">mutex</span><span class="p">;</span>
+</span><span class="line">                    <span class="n">std</span><span class="o">::</span><span class="n">unique_lock</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">mutex</span><span class="o">&gt;</span> <span class="n">lock</span><span class="p">(</span><span class="n">mutex</span><span class="p">);</span>
+</span><span class="line">                    <span class="n">cv</span><span class="p">.</span><span class="n">wait</span><span class="p">(</span><span class="n">lock</span><span class="p">);</span>
+</span><span class="line">                <span class="p">}).</span><span class="n">join</span><span class="p">();</span>
+</span><span class="line">    <span class="k">return</span> <span class="mi">0</span><span class="p">;</span>
+</span><span class="line"><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>在处理信号时，如果只需要周期性检查信号是否已经发生，则可注册一个信号处理函数即可搞定。但是如果需要
+处理复杂逻辑，则最好创建一个专用线程来同步处理信号。</p>
+
+<h1 id="references">References</h1>
+
+<ul>
+  <li><a href="http://pubs.opengroup.org/onlinepubs/9699919799/">POSIX Spec</a>, System Interfaces, Singal Concepts</li>
+</ul>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2017-12-02T20:27:41+08:00'><span class='date'>2017-12-02</span> <span class='time'>8:27 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/operating-system/'>operating system</a>, <a class='category' href='/blog/categories/programming-language/'>programming language</a>, <a class='category' href='/blog/categories/programming-practice/'>programming practice</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2017/12/01/thread-local-storage/" title="Previous Post: 线程私有存储">&laquo; 线程私有存储</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2018/01/03/cluster-membership-protocol/" title="Next Post: 分布式系统的分区管理">分布式系统的分区管理 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

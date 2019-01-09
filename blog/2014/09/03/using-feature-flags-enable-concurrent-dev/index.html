@@ -1,0 +1,319 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>使用Feature Flags进行并行开发和持续集成 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Introduction 在服务开发过程中经常需要一边修复线上bug，一边又要开发新特性，而且可能需要同时开发好几个新特性，不同
+的新特性开发持续的时间不等。这样要等到所有代码都开发完、测试好需要很长时间，代码一直处于无法上线的状
+态，无法敏捷响应需求。如果这时候线上又出现紧急bug， &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2014/09/03/using-feature-flags-enable-concurrent-dev/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">使用Feature Flags进行并行开发和持续集成</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2014-09-03T00:00:00+08:00'><span class='date'>2014-09-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="introduction">Introduction</h2>
+
+<p>在服务开发过程中经常需要一边修复线上bug，一边又要开发新特性，而且可能需要同时开发好几个新特性，不同
+的新特性开发持续的时间不等。这样要等到所有代码都开发完、测试好需要很长时间，代码一直处于无法上线的状
+态，无法敏捷响应需求。如果这时候线上又出现紧急bug，就没法及时发布修复。
+<!--more--></p>
+
+<h2 id="feature-branch">使用feature branch的解决方案</h2>
+
+<p>为了防止修复bug和特性开发不相互干扰，并能及时响应线上bug，一般采用源代码版本管理系统的分支功能：</p>
+
+<ul>
+  <li>trunk分支是经过严格测试的稳定分支，随时处于发布状态，并与线上代码一致；</li>
+  <li>每个特性可以另开一个branch开发，等到稳定后再合入trunk发布；</li>
+  <li>修复bug时也开一个branch开发，验证通过后再合入trunk发布。</li>
+</ul>
+
+<p>笔者采用这种传统的解决方案使用了一段时间，确实可以解决并行开发的问题，但是在实践中也发现了一些恼火的
+问题：</p>
+
+<ul>
+  <li>一个潜在的风险是合入trunk，多个特性单独测试是ok的，一旦合入就容易引起bug，所以合入trunk后还得继续
+测试；</li>
+  <li>SVN操作比较复杂：建立分支，开发，合并trunk的更新，反向合入trunk，测试，提交trunk，删除branch。对于
+新手来讲更容易出错，尤其是多人开发时需要解决冲突，严重影响效率。</li>
+</ul>
+
+<h2 id="feature-flag">使用feature flag</h2>
+
+<p>要解决SVN操作复杂的问题就必须停止使用branch开发，只使用trunk。但是trunk又必须保持随时可以发布的状态。
+这可以借助于灰度发布的思想解决，新特性若没开发完毕可以使其代码不生效，用户看不见，待到成熟后再上线，
+这可以采用开关控制其是否上线，就像一个个模块一样，可要可不要。</p>
+
+<p>我们可以为每个特性取一个名字，在配置文件中控制其是否上线：</p>
+
+<pre><code>use-new-feature=true
+</code></pre>
+
+<p>然后在代码中这样判断：</p>
+
+<pre><code>if (config-&gt;isFeatureLaunched("use-new-feature")) {
+    // 新特性代码。
+    ...
+}
+</code></pre>
+
+<p>更进一步，开关出了打开和关闭这两种状态外还可以引入中间状态，进行灰度测试：</p>
+
+<pre><code>use-new-feature=10%
+</code></pre>
+
+<p>意思是说对于10%的用户使用新特性，灰度测试新特性是否正常。并且在某些情况下如果出了紧急问题可以先用开
+关关掉，提供有损服务。</p>
+
+<p>引入feature flag后我们完全可以换个角度去看待特性开发。每个特性可以看成一个个独立的模块，可以上线也可
+以下线，可从技术角度和业务角度决定是否上线，更好地降低了特性之间的耦合。</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2014-09-03T00:00:00+08:00'><span class='date'>2014-09-03</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/distributed-system/'>distributed system</a>, <a class='category' href='/blog/categories/programming-practice/'>programming practice</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/06/19/implement-transactional-queue-using-mysql/" title="Previous Post: 用MySql实现事务型消息队列">&laquo; 用MySql实现事务型消息队列</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2017/12/01/thread-local-storage/" title="Next Post: 线程私有存储">线程私有存储 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

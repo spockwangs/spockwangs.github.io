@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Mysql | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/mysql/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[关于Mysql客户端、连接和服务器字符集]]></title>
+    <link href="http://spockwangs.github.io/blog/2013/03/14/mysql-character-set/"/>
+    <updated>2013-03-14T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2013/03/14/mysql-character-set</id>
+    <content type="html"><![CDATA[<h2 id="introduction">Introduction</h2>
+
+<p>Mysql在客户端与服务器交互时涉及到几个字符集和collation的转换问题：</p>
+
+<ul>
+  <li>
+    <p>客户端发给服务器的查询语句的字符集是什么？</p>
+
+    <p>客户端发给服务器的语句的字符集由系统变量<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_client">character_set_client</a>定义。
+<!--more--></p>
+  </li>
+  <li>
+    <p>服务器收到查询语句后会转换成什么字符集？</p>
+
+    <p>服务器将收到的查询语句从<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_client">character_set_client</a>转换为
+<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_connection">character_set_connection</a>，除非字符串常量显式指定了字符集。系统变量
+<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_collation_connection">collation_connection</a>定义了字符串常量的collation.</p>
+  </li>
+  <li>
+    <p>服务器返回给客户端的数据的字符集 是什么？</p>
+
+    <p>服务器返回给客户端的数据字符集由系统变量[character_set_results][character_set_results]定义。</p>
+  </li>
+  <li>
+    <p>服务器采用什么字符集存储数据？</p>
+
+    <p>Mysql中<a href="http://dev.mysql.com/doc/refman/5.5/en/string-types.html">字符串类型</a>有两种。对于非二进制字符串类型（<code>char</code>,
+<code>varchar</code>和<code>text</code>）采用建表时指定的字符集存储，对于二进制类型的数据（<code>binary</code>, <code>varbinary</code>, <code>blob</code>, <code>tinyblob</code>,
+<code>mediumblob</code>等类型的数据）采用<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_connection">character_set_connection</a>定义的字符集所映射的二进制值存储，注
+意这些类型本身是没有字符集的。</p>
+  </li>
+</ul>
+
+<p>上面这些系统变量均是<a href="http://dev.mysql.com/doc/refman/5.0/en/using-system-variables.html">会话变量</a>，改变它们的值不会影响其它客户端与服务器的连接。</p>
+
+<h2 id="section">如何设置字符集</h2>
+
+<p>我们通常用<code>set names</code>语句设置连接相关的字符集。
+<code>
+mysql&gt; set names 'charset_name' [collate 'collation_name']
+</code>
+等价于
+<code>
+mysql&gt; set character_set_client = 'charset_name'
+mysql&gt; set character_set_results = 'charset_name'
+mysql&gt; set character_set_connection = 'charset_name'
+</code>
+## 如何查看设置的字符集</p>
+
+<p>可以这样查看设置的系统变量
+<code>
+mysql&gt; show variables like 'character_set%';
++--------------------------+---------------------------------------+
+| Variable_name            | Value                                 |
++--------------------------+---------------------------------------+
+| character_set_client     | latin1                                | 
+| character_set_connection | latin1                                | 
+| character_set_database   | latin1                                | 
+| character_set_filesystem | binary                                | 
+| character_set_results    | latin1                                | 
+| character_set_server     | latin1                                | 
+| character_set_system     | utf8                                  | 
+| character_sets_dir       | /data/mysql_root/base/share/charsets/ | 
++--------------------------+---------------------------------------+
+8 rows in set (0.00 sec)
+</code>
+## References</p>
+
+<ul>
+  <li><a href="http://dev.mysql.com/doc/refman/5.5/en/charset-connection.html">关于连接字符集</a>.</li>
+  <li><a href="http://dev.mysql.com/doc/refman/5.0/en/using-system-variables.html">关于Mysql的两种系统变量</a>.</li>
+</ul>
+
+]]></content>
+  </entry>
+  
+</feed>

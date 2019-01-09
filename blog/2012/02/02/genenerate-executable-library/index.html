@@ -1,0 +1,366 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>生成可执行的共享库 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Linux系统下共享对象文件和可执行文件的格式都是ELF格式，它们并没有什么本质 上
+的区别。共享对象文件也是可以执行的。例如Linux下动态链接器ld-linux.so就 是共
+享对象文件，它也可以像可执行文件一样执行；Glibc库函数也是一样。 共享对象文件要执行有2个问题要解决： &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/02/02/genenerate-executable-library/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">生成可执行的共享库</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-02T00:00:00+08:00'><span class='date'>2012-02-02</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>Linux系统下共享对象文件和可执行文件的格式都是ELF格式，它们并没有什么本质 上
+的区别。共享对象文件也是可以执行的。例如Linux下动态链接器ld-linux.so就 是共
+享对象文件，它也可以像可执行文件一样执行；Glibc库函数也是一样。
+<!--more--></p>
+
+<p>共享对象文件要执行有2个问题要解决：</p>
+
+<ol>
+  <li>共享对象文件的<strong>加载地址</strong>(loading address)是随机的（由操作系统决定恰当的
+地址），不像可执行文件，每次都加载到相同的固定地址（在Linux下是0x8048000）。
+因此，共享对象要能正确执行，必须编译成<strong>位置无关代码</strong>（Position Independent
+Code, PIC）。这可以通过gcc的-fpic选项得到。</li>
+  <li>共享对象也会用到其他的共享库函数（如C语言库函数），引用的外部符号都必须
+被<strong>解析和重定位</strong>，而这些必须在运行时完成。这就需要动态链接器的帮助。所以，共
+享对象必须编译成依赖动态链接器，也就是说共享对象文件要有<strong>.interp段</strong>。若没有
+这个段，操作系统在执行时会认为这个文件不需要动态链接器的支持，因而会直接执行
+这个文件，最后由于对外部符号的访问是错误的（对外部符号的引用没有正确定位）导
+致segmentation fault。通常情况下，共享对象文件编译时是不会生成.interp段的，
+只有可执行文件在使用了共享库的情况下才会生成这个段。下面我就来讲讲如何在共享
+对象文件中生成这个段。</li>
+</ol>
+
+<p>最好用一个简单的例子来讲解这2个问题如何解决。示例代码如下：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="cp">#include &lt;stdio.h&gt;   </span><span class="c1">// for printf()</span>
+</span><span class="line"><span class="cp">#include &lt;stdlib.h&gt;  </span><span class="c1">// for exit()</span>
+</span><span class="line"><span class="kt">void</span> <span class="nf">fun</span><span class="p">()</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line">    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;This is fun.</span><span class="se">\n</span><span class="s">&quot;</span><span class="p">);</span>
+</span><span class="line">    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class="line"><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>该代码保存在<code>fun.c</code>文件中。</p>
+
+<p>第一个问题容易解决。要编译成PIC代码，只需要传递<code>gcc</code>选项<code>-fpic</code>即可：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="err">$</span> <span class="n">gcc</span> <span class="o">-</span><span class="n">fpic</span> <span class="o">-</span><span class="n">shared</span> <span class="o">-</span><span class="n">Wl</span><span class="p">,</span><span class="o">-</span><span class="n">e</span><span class="p">,</span><span class="n">fun</span> <span class="o">-</span><span class="n">o</span> <span class="n">fun</span><span class="p">.</span><span class="n">so</span> <span class="n">fun</span><span class="p">.</span><span class="n">c</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>其中<code>-Wl,-e,fun</code>是通知链接器生成的对象文件的入口地址是<code>fun</code>。执行文件<code>fun.so</code>会得到如下结果：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">fun</span><span class="p">.</span><span class="n">so</span>
+</span><span class="line"><span class="n">Segmentation</span> <span class="n">fault</span> <span class="p">(</span><span class="n">core</span> <span class="n">dumped</span><span class="p">)</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>之所以这样是因为在<code>fun.c</code>中调用了C语言库函数<code>printf()</code>，但没有对这个外部符号
+正确地重定位（由于没有.interp段，操作系统认为这个文件不需要动态链接库重定
+位），因而引用了非法地址，所以产生了段错误。通过下面的命令可以查看<code>fun.so</code>文
+件没有.interp段。</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="err">$</span> <span class="n">readelf</span> <span class="o">-</span><span class="n">l</span> <span class="p">.</span><span class="o">/</span><span class="n">fun</span><span class="p">.</span><span class="n">so</span> <span class="o">|</span> <span class="n">grep</span> <span class="n">interp</span>
+</span><span class="line"><span class="err">$</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>结果没有输出，说明<code>fun.so</code>文件中确实不存在.interp段。</p>
+
+<p>要生成.interp段，可以在某个源文件中加入下面一句：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="k">const</span> <span class="kt">char</span> <span class="n">__invoke_dynamic_linker__</span><span class="p">[]</span> <span class="n">__attribute__</span> <span class="p">((</span><span class="n">section</span> <span class="p">(</span><span class="s">&quot;.interp&quot;</span><span class="p">)))</span>
+</span><span class="line">    <span class="o">=</span> <span class="n">RUNTIME_LINKER</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>这正是<code>glibc</code>的做法。这句代码在<code>glibc</code>的<code>elf/interp.c</code>
+文件中。这也是为什么<code>glibc</code>库函数有.interp段的原因。RUNTIME_LINKER就
+是动态链接库的名字，取决于目标机器。我们也可以用这种方式来解决这个问题，代码
+如下：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="cp">#include &lt;stdio.h&gt;    </span><span class="c1">// for printf()</span>
+</span><span class="line"><span class="cp">#include &lt;stdlib.h&gt;   </span><span class="c1">// for exit()</span>
+</span><span class="line"><span class="k">const</span> <span class="kt">char</span> <span class="n">__invoke_dynamic_linker</span><span class="p">[]</span> <span class="n">__attribute__</span> <span class="p">((</span><span class="n">section</span> <span class="p">(</span><span class="s">&quot;.interp&quot;</span><span class="p">)))</span>
+</span><span class="line">    <span class="o">=</span> <span class="s">&quot;/lib/ld-linux.so.2&quot;</span><span class="p">;</span>
+</span><span class="line"><span class="kt">void</span> <span class="nf">fun</span><span class="p">()</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line">    <span class="n">printf</span><span class="p">(</span><span class="s">&quot;This is fun./n&quot;</span><span class="p">);</span>
+</span><span class="line">    <span class="n">exit</span><span class="p">(</span><span class="mi">0</span><span class="p">);</span>
+</span><span class="line"><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>注意我用<code>/lib/ld-linux.so.2</code>替代了<code>RUNTIME_LINKER1</code>，因为它就是linux上的动态链接器，在<code>/lib</code>目录下。</p>
+
+<p>用如下方式编译并执行：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="err">$</span> <span class="n">gcc</span> <span class="o">-</span><span class="n">fpic</span> <span class="o">-</span><span class="n">shared</span> <span class="o">-</span><span class="n">o</span> <span class="n">fun</span><span class="p">.</span><span class="n">so</span> <span class="o">-</span><span class="n">Wl</span><span class="p">,</span><span class="o">-</span><span class="n">e</span><span class="p">,</span><span class="n">fun</span> <span class="n">fun</span><span class="p">.</span><span class="n">c</span>
+</span><span class="line"><span class="err">$</span> <span class="p">.</span><span class="o">/</span><span class="n">fun</span><span class="p">.</span><span class="n">so</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>终于大功告成。</p>
+
+<h2 id="section">参考文献</h2>
+
+<p>本文方法来自<a href="http://sourceware.org/ml/binutils/2008-06/msg00161.html">这个帖子的</a>回帖。</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-02T00:00:00+08:00'><span class='date'>2012-02-02</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/programming-language/'>programming language</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/02/02/emacs-config-in-windows/" title="Previous Post: 在Windows上配置Emacs 23">&laquo; 在Windows上配置Emacs 23</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/02/03/cpp-new-and-delete/" title="Next Post: C++的new和delete运算符与内存分配函数和释放函数">C++的new和delete运算符与内存分配函数和释放函数 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

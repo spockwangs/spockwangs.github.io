@@ -1,0 +1,485 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>数据对齐 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="为什么要数据对齐？ 所谓数据对齐是指访问数据的地址要满足一定的条件，能被这个数据的长度所整除。例
+如，1字节数据已经是对齐的，2字节的数据的地址要被2整除，4字节的数据地址要
+被4整除。 但为什么要数据对齐呢？简单地说，数据对齐是为了读取数据的效率。假如说每一次读
+取数据时都是一个字节一个字节读取 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/02/03/data-alignment/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">数据对齐</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="section">为什么要数据对齐？</h2>
+
+<p>所谓数据对齐是指访问数据的地址要满足一定的条件，能被这个数据的长度所整除。例
+如，1字节数据已经是对齐的，2字节的数据的地址要被2整除，4字节的数据地址要
+被4整除。
+<!--more-->
+但为什么要数据对齐呢？简单地说，数据对齐是为了读取数据的效率。假如说每一次读
+取数据时都是一个字节一个字节读取，那就不需要对齐了，这跟读一个字节没有什么区
+别，就是多读几次。但是这样读取数据效率不高。为了提高读取数据的带宽，现代存储
+系统都采用许多并行的存储芯片来提高读取效率。以自然字长为4个字节的机器为例。</p>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">memory chip     0       1       2       3
+</span><span class="line">offset
+</span><span class="line">
+</span><span class="line">  0             0       1       2       3
+</span><span class="line">  1             4       5       6       7
+</span><span class="line">  2             8       9      10      11
+</span><span class="line">  N            4N    4N+1    4N+2    4N+3</span></code></pre></td></tr></table></div></figure>
+<p>如上图所示，地址0-3的4字节数据都存储在4个不同的芯片上。CPU的bits 0-7连上芯片
+0，bits 8-15连上芯片1，bits 16-23连上芯片2，bits 24-31连上芯片4。</p>
+
+<p>如果从地址0读取4字节数据，4个存储芯片都从各自的地址0读出数据，而且位置也是正
+确的。这4个字节的读取可以并行地进行，因此带宽是一次读取一个字节的4倍。</p>
+
+<p>假如要从地址1读取4字节数据会发生什么呢？首先，读取的数据位置不正确。从芯片1
+读取的数据应该放在bits 0-7，它却对应CPU的bits 8-15。从芯片2，3，0读取的数据
+也是一样。这并不是什么大问题，CPU可以把读入的数据循环左移8比特来把它们放置在
+正确的位置上。问题在于，这一次发给4个芯片的地址不一样，给芯片1，2和3的地址是
+0，给芯片0的地址是1。也就是说给每一个芯片的地址都不一样，这就需要多根地址总
+线。32位的CPU就需要4个地址总线，每个地址总线需要用到CPU的至少32个引脚，也就
+是必须要100多根引脚。而通常32位的CPU也就400多个引脚。这当然会增加CPU与内存接
+口的复杂性（也可能会有其它的方案解决这个问题，但最终都会使接口变得更复杂，还
+可能会降低效率）。但是增加这个复杂性是不值得。由于大多数数据访问都可以做成对
+齐的（编译器通常会使数据对齐），因此为了使极少数的不对奇访问速度更快而使CPU
+与内存的接口变的更复杂，是不划算的。</p>
+
+<p>在这样的设计下，访问没有对齐的数据需要2次访问。比如，访问地址1, 2, 3, 4的4字
+节数据，先读取地址0-3的数据，再读取地址4-7的数据，再把地址1-5的数据取出来放
+到目的寄存器中。相应地，这增加了CPU内部的复杂性。这就解释了为什么不对齐的数
+据要多次访问内存，速度不如访问对齐的数据快。而且也解释了为什么原子类型的数据
+必须要对齐。有的CPU，例如Motorala生产的一些CPU，还有IBM的PowerPC，为了消除这
+个复杂性，干脆禁止访问不对奇地址（若访问不对奇地址时将产生异常）。</p>
+
+<p>总结一下为什么需要数据对齐。为了增加CPU读取数据的带宽，内存系统通常都采用并
+行结构使得可以并行传输数据。这样的并行结构使得访问对齐的数据速度快，但是若要
+使访问不对奇的数据也一样快会使CPU与内存系统的接口变得更复杂，而这是划不来的。
+经过权衡之后，最终的结果是：访问对齐的数据速度快，访问不对奇的数据速度慢（需
+要2次访问）或干脆禁止访问不对奇数据。</p>
+
+<p>关于访问对齐数据和不对齐数据的速度差异请看<a href="http://www.ibm.com/developerworks/library/pa-dalign/">这里</a>。关于为什么使访问不对
+齐数据需要多次访问请看<a href="http://stackoverflow.com/q/3903164/471846">这里</a>。关于哪些CPU禁止访问不对奇数据以及在这些CPU上如何解
+决访问不对齐数据的问题请看<a href="http://en.wikipedia.org/wiki/Data_structure_alignment">这里</a>.</p>
+
+<h2 id="visual-c">Visual C++的结构体对齐规则</h2>
+
+<p>MSDN对Visual C++的结构体对齐规则有<a href="http://msdn.microsoft.com/zh-cn/library/hx1b6kkd.aspx">简单介绍</a>，现摘录如下：</p>
+
+<blockquote>
+  <p>Structure members are stored sequentially in the order in which they are
+declared: the first member has the lowest memory address and the last
+member the highest.</p>
+
+  <p>Every data object has an alignment-requirement. The alignment-requirement
+for all data except structures, unions, and arrays is either the size of
+the object or the current packing size (specified with either /Zp or the
+pack pragma, whichever is less). For structures, unions, and arrays, the
+alignment-requirement is the largest alignment-requirement of its
+members. Every object is allocated an offset so that</p>
+
+  <pre><code>offset %  alignment-requirement == 0
+</code></pre>
+
+  <p>Adjacent bit fields are packed into the same 1-, 2-, or 4-byte allocation
+unit if the integral types are the same size and if the next bit field
+fits into the current allocation unit without crossing the boundary
+imposed by the common alignment requirements of the bit fields.</p>
+</blockquote>
+
+<p>每一个数据对象都有一个对齐限制，通常称为<strong>对齐模数</strong>。对于基本
+类型（不包括结构体，联合体和数组）不同的数据类型的对齐模数通常等于这个数据类
+型的大小，比如<code>char</code>的对齐模数为1，<code>short</code>的对齐模数为2，<code>int</code>的对齐模数为4，
+<code>float</code>的对齐模数是4，<code>double</code>的对齐模数为8。当然，这个对齐模数每一个编译器
+可能有差异，并且可以设置。在Visual C++中可以通过<tt>/Zp</tt>选项或
+<code>#pragma</code>设置。综合起来，基本类型的对齐模数是这个类型的大小和设置的对齐限制
+的较小者。对于结构体，联合体和数组，对齐模数是它的成员的对齐模数的最大值。</p>
+
+<p>现举几个例子说明一下。（下面例子都在Visual C++ 2008 Express Edition上测试
+过。）</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="k">struct</span> <span class="n">A</span> <span class="p">{</span>
+</span><span class="line">    <span class="kt">char</span> <span class="n">c</span><span class="p">;</span>
+</span><span class="line">    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class="line"><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+<p><code>c</code>的对齐模数是1，<code>i</code>的对齐模数是4，因此结构体<code>A</code>的对齐模数为4。<code>c</code>本身占用
+1个字节，由于<code>i</code>的对齐模数为4，因此<code>c</code>后面填充3个字节以使<code>i</code>的起始地址对齐。
+这样加起来是8个字节，<code>A</code>已经对齐了, 后面不用再填充了，因此<code>A</code>占用8个字节。</p>
+
+<p>另一个例子。</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="k">struct</span> <span class="n">A</span> <span class="p">{</span>
+</span><span class="line">    <span class="kt">char</span> <span class="n">c</span><span class="p">;</span>
+</span><span class="line">    <span class="kt">int</span> <span class="n">i</span><span class="p">;</span>
+</span><span class="line">    <span class="kt">char</span> <span class="n">d</span><span class="p">;</span>
+</span><span class="line"><span class="p">};</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>跟上面一样，<code>c</code>的对齐模数是1，<code>i</code>的对齐模数是4，
+<code>d</code>的对齐模数是1，因此结构体<code>A</code>的对齐模数为4。
+<code>c</code>占用1字节，为使<code>i</code>对齐，<code>c</code>后面要填充3个
+字节，因此<code>c</code>和<code>i</code>占用8个字节。<code>d</code>占用1个字节，
+这样一共占用9个字节，但是<code>A</code>的对齐模数是4，因此<code>d</code>后面
+要填充4字节。因此<code>A</code>占用12字节。</p>
+
+<p>对于比特域来讲，上面的规则要稍稍修改一下。对于连续的声明类型大小相同的比特域
+来讲，如果它们申请的宽度加起来不超过它们声明的类型大小，那么它们可以压缩在一
+个分配单元中。对于声明类型大小不同的比特与来讲，它们分配在不同的分配单元中。</p>
+
+<pre><code>struct A {
+    char a : 3;
+    char b : 5;
+};
+</code></pre>
+
+<p><code>a</code>和<code>b</code>的类型长度都为1字节，因此可以考虑合并。它们加起来为8比特，
+可以放在一个字节中，由于<code>A</code>的对齐模数为1，因此不需在后面再填充数
+据，所以<code>A</code>的大小为1字节。</p>
+
+<p>另一个例子.</p>
+
+<pre><code>struct A {
+    char a : 4;
+    char b : 5;
+}
+</code></pre>
+
+<p><code>a</code>和<code>b</code>的类型长度都为1字节，因此可以考虑合并，但跟上
+例不同的是，它们无法放入一个字节中（加起来为9比特），因此它们要放在各自的分
+配单元中，<code>a</code>和<code>b</code>之间有4比特的空隙。<code>A</code>的
+大小为2字节。</p>
+
+<p>再考虑如下例子.</p>
+
+<pre><code>struct A {
+    char a : 3;
+    int b : 2;
+    char c : 2;
+};
+</code></pre>
+
+<p><code>a</code>和<code>b</code>的类型长度不相等（<code>a</code>的为1字节，
+<code>b</code>的为4字节），因此不能合并，同样<code>b</code>和<code>c</code>
+也不能合并。因此，<code>a</code>单独占用1字节，后面填充3字节以使
+<code>b</code>对齐，<code>b</code>占用4字节，<code>c</code>占用1字节。由于
+<code>A</code>的对齐模数是4字节，所以<code>c</code>后面要填充3字节，
+<code>A</code>的大小为12字节。</p>
+
+<p>下面再考虑匿名比特域的例子。匿名比特域主要目的是在两个比特域之间加入一段空隙。</p>
+
+<pre><code>struct A {
+    char a : 2;
+    char   : 2;
+    char b : 2;
+};
+</code></pre>
+
+<p>匿名比特域对对齐规则没有影响，它唯一的不同是无法引用这个域。由于这3个域的类
+型大小是一样的，且可以放在一个字节之中，因此可以合并，<code>A</code>的大小为
+1字节。</p>
+
+<p>下面再考虑匿名比特域宽度为0的，它的作用是使它后面的比特域对齐到下个比特域的对齐模数上，也就是说，不允许它跟上一个比特域合并。</p>
+
+<pre><code>struct A {
+    char a : 2;
+    char   : 0;
+    char b : 2;
+};
+</code></pre>
+
+<p>尽管这三个比特域的类型一样，但是由于<code>a</code>和<code>b</code>之间有一个
+宽度为0的匿名比特域，因此 它们不能合并。<code>a</code>和<code>b</code>个占用
+1个字节，所以<code>A</code>的大小为2字节。</p>
+
+<p>最后，对于具有普通成员和比特域的结构体，它们的对齐规则跟上面的一样。注意，普
+通成员与比特域不能合并，只有连续的比特域之间可以考虑合并，每一个成员都要对
+齐到自己的对齐模数上。</p>
+
+<h2 id="section-1">如何实现数据对齐</h2>
+
+<p>通过调用<code>malloc()</code>或者<code>new</code>运算符动态分配的内存已经是对任何类型都对齐了（见<a href="http://stackoverflow.com/questions/8752546/how-does-malloc-understand-alignment/18479609#18479609">这
+里
+</a>
+）。如果自己动手写一个内存分配器也要注意分配对齐的内存。通常编译器会提供工具来帮助对齐，例如，GCC提
+供了<a href="https://gcc.gnu.org/onlinedocs/gcc/Alignment.html"><code>__alignof__()</code></a>来获得数据结构的对齐要求。
+C++11也提供了类似的运算符<a href="http://en.cppreference.com/w/cpp/language/alignof"><code>alignof</code></a>。</p>
+
+<p>在静态存储区或者栈上定义的对象由编译器分配内存并保证对齐要求。如果是用户自己在静态存储区或者栈上分配
+内存可以使用编译器或者编程语言提供的工具实现对齐，如GCC提供
+<a href="https://gcc.gnu.org/onlinedocs/gcc/Common-Variable-Attributes.html#Common-Variable-Attributes"><code>aligned</code></a>
+属性实现对齐：</p>
+
+<pre><code>int a __attribute ((aligned(__alignof(std::string)));
+</code></pre>
+
+<p>表示<code>a</code>的对齐要求与<code>std::string</code>一样。C++11提供了运算符
+<a href="http://en.cppreference.com/w/cpp/language/alignas"><code>alignas</code></a>，上述的例子改写如下：</p>
+
+<pre><code>alignas(alignof(std::string)) int a;
+</code></pre>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/computer-system/'>computer system</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/02/03/cpp-new-and-delete/" title="Previous Post: C++的new和delete运算符与内存分配函数和释放函数">&laquo; C++的new和delete运算符与内存分配函数和释放函数</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/02/03/epigrams-on-programming/" title="Next Post: Epigrams on Programming">Epigrams on Programming &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

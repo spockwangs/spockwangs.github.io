@@ -1,0 +1,331 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Typecast in C++ - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="There are four types of type-cast in C++, which are preferred than the C-style cast. ## static_cast static_cast has following uses. Cast between &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2011/08/22/typecast-in-cpp/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">Typecast in C++</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2011-08-22T00:00:00+08:00'><span class='date'>2011-08-22</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>There are four types of type-cast in C++, which are preferred than the C-style cast.
+<!--more-->
+## static_cast</p>
+
+<p><code>static_cast</code> has following uses.</p>
+
+<ol>
+  <li>Cast between arithmetic types, such as casting from <code>int</code> to <code>char</code>.</li>
+  <li>Cast a value of integral type to an enumeration type.  In C++ a value of integral type can not be implicitly converted to an enumeration type, which is different from C.  The integral value must be in the range of the enumeration values.  (See clause 7, 5.2.9 of [C++ standard 98])</li>
+  <li>Cast a value of type “pointer to <code>void</code>” to a pointer to object type.  You must ensure that the original pointer is really pointing to the destination object type.</li>
+  <li>Cast any type to <code>void</code>.</li>
+  <li>Down-cast in case of pointer.  Convert a value of type “pointer to <code>B</code>” to a value of type “pointer to <code>D</code>”, where <code>B</code> is a non-virtual base class of <code>D</code>.  You must make sure that the original pointer is really pointing to the sub-object of <code>D</code>. (See clause 8, 5.2.9 of [C++ standard 98])</li>
+  <li>Dow-cast in case of reference.  Convert a value of type “reference to <code>B</code>” to a value of type “reference to <code>D</code>”, where <code>B</code> is a non-virtual base class of <code>D</code>.  You must make sure that the original reference is really referencing the sub-object of <code>D</code>. (See clause 5, 5.2.9 of [C++ standard 98])</li>
+</ol>
+
+<p>Note that you cannot use <code>static_cast</code> to convert a value of type “pointer
+to <code>int</code>” to a pointer to <code>char</code>.  This is a frequent misuse of
+<code>static_cast</code>.  You have to use <code>reinterpret_cast</code> to do that.</p>
+
+<p>All the conversions that <code>static_cast</code> does is done at compile-time, so
+what it can do is limited.  Due to lacking run-time info it just does basic
+type checking and can not make sure what you do is valid.  For example you
+may convert a pointer to a wrong type but <code>static_cast</code> can not figure it
+out.</p>
+
+<h2 id="dynamiccast">dynamic_cast</h2>
+
+<p>Dynamic cast is usually used to convert a pointer to a base class to a pointer to a derived class.</p>
+
+<p>Consider the following dynamic cast expression:</p>
+
+<pre><code>dynamic_cast&lt;T&gt;(v)
+</code></pre>
+
+<p>we have following situations</p>
+
+<ol>
+  <li>If <code>v</code> is a null pointer the result is the null pointer in <code>T</code> type. (See clause 4, 5.2.7 of [C++ standard 98])</li>
+  <li>Up-cast in case of pointer.  If <code>v</code> is a pointer to <code>D</code> and <code>T</code> is “pointer to <code>B</code>” where <code>B</code> is a base class of <code>D</code>, the result is a pointer to the unique <code>B</code> sub-object of <code>D</code>. (See clause 5, 5.2.7 of [C++ standard 98])</li>
+  <li>Up-cast in case of reference.  If <code>v</code> has type <code>D</code> and <code>T</code> is “reference to <code>B</code>” where <code>B</code> is a base class of <code>D</code>, the result is a reference to the unique <code>B</code> sub-object of <code>D</code>. (See clause 5, 5.2.7 of [C++ standard 98])</li>
+  <li>Down-cast and cross-cast.  If <code>T</code> is “pointer to <code>void</code>”, the result is a pointer to the most derived object pointed to by <code>v</code>.  Otherwise, a run-time check is applied to see if the conversion is valid.  The value of a failed cast to pointer type is a null pointer.  A failed cast to reference type throws <code>bad_cast</code>.  (See clause 8, 5.2.7 of [C++ standard 98])</li>
+</ol>
+
+<h2 id="reinterpretcast">reinterpret_cast</h2>
+
+<p>This is the most dangerous type cast of all because the compiler and
+run-time will not do any check.  Just like what the name means it is a
+re-interpretation of the bit pattern of the original object.  The C++
+standard does not guarantee that the bit pattern be not modified (See
+clause 3, 5.2.10 of [C++ standard 98]).  Use it judiciously.</p>
+
+<ol>
+  <li>Conversion between integral type and pointer type.</li>
+  <li>Conversion between different types of pointers.</li>
+  <li>Conversion between references which refer to different types.</li>
+</ol>
+
+<h2 id="constcast">const_cast</h2>
+
+<p>It can only be used to cast away cv-qualifiers and the original type must
+be a pointer or reference.  If the result of a <code>const_cast</code> that casts away
+const-qualifier is pointing to or referring to a object which is declared
+with const-qualifier, you can not use it to modify the underlying object
+(see clause 7, 5.2.11 and clause 7, 7.1.5.1 of [C++ standard 98]).</p>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li>[C++ standard 98] <em>The C++ standard</em>, 1998.</li>
+</ul>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2011-08-22T00:00:00+08:00'><span class='date'>2011-08-22</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/programming-language/'>programming language</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2011/08/20/symbol-resolution-by-gnu-ld/" title="Previous Post: Symbol resolution by GNU ld">&laquo; Symbol resolution by GNU ld</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2011/09/09/how-to-support-unicode-in-c/" title="Next Post: How to support Unicode in C/C++">How to support Unicode in C/C++ &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

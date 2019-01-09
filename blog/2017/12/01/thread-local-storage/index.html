@@ -1,0 +1,642 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>线程私有存储 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Introduction 线程私有变量（Thread Local Storage）之于线程相当于静态变量之于进程，与进程变量相比是每个线程都有一份，
+也就是所谓的“私有”。也可以把线程私有变量理解为key-value对，其中key是线程ID。它的主要作用是在多线程编程
+中避免锁竞争的开销。 &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2017/12/01/thread-local-storage/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">线程私有存储</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2017-12-01T21:08:54+08:00'><span class='date'>2017-12-01</span> <span class='time'>9:08 pm</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h1 id="introduction">Introduction</h1>
+
+<p>线程私有变量（Thread Local Storage）之于线程相当于静态变量之于进程，与进程变量相比是每个线程都有一份，
+也就是所谓的“私有”。也可以把线程私有变量理解为key-value对，其中key是线程ID。它的主要作用是在多线程编程
+中避免锁竞争的开销。本文将重点介绍线程私有变量的几种形式、用法及其背后的实现原理。
+<!--more--></p>
+
+<h1 id="tls">显示TLS</h1>
+
+<p>POSIX线程库提供了如下API管理TLS：</p>
+
+<ul>
+  <li><code>pthread_key_create()</code>
+    <ul>
+      <li>创建一个TLS变量，并设置析构函数</li>
+    </ul>
+  </li>
+  <li><code>pthread_setspecific()</code>
+    <ul>
+      <li>给TLS变量赋值</li>
+    </ul>
+  </li>
+  <li><code>pthread_getspecific()</code>
+    <ul>
+      <li>获取TLS变量的当前值</li>
+    </ul>
+  </li>
+  <li><code>pthread_key_delete()</code>
+    <ul>
+      <li>回收TLS变量，但是注意并不调用TLS的析构函数</li>
+    </ul>
+  </li>
+</ul>
+
+<p>下面是一个简单的例子。</p>
+
+<pre><code class="language-c++">#include &lt;pthread.h&gt;
+#include &lt;thread&gt;
+#include &lt;cassert&gt;
+#include &lt;iostream&gt;
+
+using namespace std;
+
+void cleanup(void* p)
+{
+    cout &lt;&lt; "clean" &lt;&lt; endl;
+    int* pi = reinterpret_cast&lt;int*&gt;(p);
+    delete pi;
+}
+
+int main()
+{
+    pthread_key_t tls_key;
+    int err = pthread_key_create(&amp;tls_key, cleanup);
+    assert(err == 0);
+    std::thread([=] {
+                    void* p = pthread_getspecific(tls_key);
+                    // 还没设置过值，所以是空指针。
+                    assert(p == nullptr);
+                    p = new int(3);
+                    int err = pthread_setspecific(tls_key, p);
+                    assert(err == 0);
+                    p = pthread_getspecific(tls_key);
+                    int a = *reinterpret_cast&lt;int*&gt;(p);
+                    assert(a == 3);
+                }).join();
+    void *p = pthread_getspecific(tls_key);
+    // 主线程的TLS与子线程是分开的，所以还是空指针。
+    assert(p == nullptr);
+    
+    // 由于子线程已退出，所以这里可以回收|tls_key|了。
+    err = pthread_key_delete(tls_key);
+    assert(err == 0);
+    return 0;
+}
+</code></pre>
+
+<p>有几个值得注意的地方：</p>
+
+<ul>
+  <li><code>pthread_key_delete()</code>不会自动调用每个线程TLS变量的析构函数，而且在回收key后线程在退出时也不会再调
+用析构函数，所以必须要确定: 1) 所有线程已经析构TLS变量（要么显示析构，要么线程退出，像上面的例子）; 2)而且不再使用
+该key时才能回收这个key.  这两个条件一般难以确定，所以实际使用时一般也不会回收key.</li>
+  <li><code>pthread_setspecific()</code>在覆盖之前的value时不会主动调用析构函数，调用线程必须自己保证释放资源。</li>
+  <li>TLS key的个数是有限的，通过<code>PTHREAD_KEYS_MAX</code>(limits.h)获取（在我电脑上是512）。下面我会
+讲到如何突破这个限制。</li>
+</ul>
+
+<h1 id="tls-1">显示TLS的实现</h1>
+
+<p>在Linux中每个进程有一个全局的数组管理TLS key，定义类似如下：</p>
+
+<pre><code class="language-cpp">struct pthread_key_struct {
+    uintptr_t seq;
+    void (*destructor)(void*);
+} __pthread_keys[PTHREAD_KEYS_MAX];
+</code></pre>
+
+<p>每个元素用于存储key的序列号（用于判断key是否有效，下面解释）和其对应的析构函数。序列号初始值为0.
+<code>pthread_create_key()</code>会从该数组中找到一个还未分配的元素，将其序列号加1，记上析构函数地址，并将其下标
+作为TLS key返回。那么如何判断一个key是否已分配呢？</p>
+
+<pre><code class="language-C++">#define KEY_UNUSED(seq) (((seq) &amp; 1) == 0)
+</code></pre>
+<p>若序列号为偶数则表示未分配，分配时将其加1变成奇数即可。这个操作采用原子CAS来完成，以保证线程安全。在
+<code>pthread_key_delete()</code>时也会将序列号加1，表示可以继续使用，通过序列号机制来保证回收的key不会被复用
+（复用的key会导致线程在退出时可能会调用错误的析构函数）。但是一直加1会导致序列号回绕，还是会复用key。
+所以创建key时会检查是否有回绕风险，如果有则创建失败。</p>
+
+<pre><code class="language-C++">#define KEY_USABLE(seq) (((uintptr_t)(seq)) &lt; ((uintptr_t) ((seq) + 2)))
+</code></pre>
+
+<p>每个线程都有一个自己的线程控制块TCB（管理寄存器、线程栈等），里面有一个TLS数组(我的电脑上是32个元素）
+用于存放线程私有变量。TLS数组的每个元素定义类似如下：</p>
+
+<pre><code class="language-C++">struct pthread_key_data {
+    uintptr_t seq;
+    void* data;
+};
+</code></pre>
+<p>上面提到过<code>pthread_key_create()</code>返回的TLS key其实是<code>__pthread_keys</code>数组的下标。
+<code>pthread_setspecific()</code>根据TLS key定位TLS数组的一个元素，并设置其序列号seq和数据指针。
+如果这个数组不够用，则会再动态分配一个二级数组（在我的电脑上是一个32x32的稀疏数组）。
+线程退出时，<code>pthread_key_data</code>中的序列号用于判断该key是否仍在使用中（即与<code>__pthread_keys</code>中
+的同一个下标对应的序列号是否相同），若是则调用TLS的析构函数。</p>
+
+<h2 id="boosttls">Boost的TLS实现</h2>
+
+<p>为了突破POSIX线程库对TLS变量个数的限制，<code>boost::thread_specific_ptr</code>只需要创建一个key，并设置该
+key对应的TLS变量指向一个<code>map</code>，这样可以在该<code>map</code>中存放无数个（仅受内存限制）TLS变量。</p>
+
+<p>另外<code>boost::thread_specific_ptr</code>的<code>reset()</code>可规避<code>pthread_setspecific()</code>忘记释放资源的坑。
+不过<code>boost::thread_specific_ptr</code>的析构函数的执行时机也有与<code>pthread_key_delete()</code>一样的限制。</p>
+
+<h1 id="tls-2">隐式TLS</h1>
+
+<p>相比于上面显示TLS需要动态调用API构造线程私有变量，隐式TLS更加方便，采用编程语言提供的关键字声明即可。
+下面是采用C++11的关键字<code>thread_local</code>重写上面的程序。</p>
+
+<pre><code class="language-C++">#include &lt;thread&gt;
+#include &lt;cassert&gt;
+#include &lt;memory&gt;
+
+using namespace std;
+
+int main()
+{
+    thread_local unique_ptr&lt;int&gt; tls_int_ptr;
+    std::thread([] {
+                    tls_int_ptr.reset(new int(3));
+                    assert(*tls_int_ptr == 3);
+                }).join();
+    // 主线程的TLS与子线程是分开的，所以还是空指针。
+    assert(tls_int_ptr == nullptr);
+    return 0;
+}
+</code></pre>
+
+<p><code>thread_local</code>声明的变量在线程启动时构造，并在线程退出时析构。而且不像POSIX的TLS，没有数量限制。但是
+其析构的时机没法动态控制。</p>
+
+<h2 id="threadlocal">为什么<code>thread_local</code>不能是非静态变量</h2>
+
+<p>根据C++11标准，<code>thread_local</code>变量必须是静态变量（名字空间变量、函数静态变量或者类的静态成员变量），不
+能是类的非静态成员。例如，下面的代码是非法的:</p>
+
+<pre><code class="language-C++">class C {
+    int a;
+    thread_local int b;
+};
+</code></pre>
+<p>必须如下声明<code>b</code>是静态成员变量：</p>
+
+<pre><code class="language-C++">class C {
+    int a;
+    thread_local static int b;
+};
+</code></pre>
+<p>这有时候确实不方便，因为我们希望每个<code>C</code>对象都有自己的成员副本<code>b</code>，不过这可以用下面的方法规避这个问题：</p>
+
+<pre><code class="language-C++">class C {
+    int GetBPerThread()
+    {
+        return b_map[this];
+    }
+
+    int a;
+    thread_local static std::map&lt;void*, int&gt; b_map;
+};
+</code></pre>
+
+<p>既然可以规避，那为啥标准不直接支持呢？这是因为TLS变量的内存布局与类的非静态成员不兼容导致的。假设
+<code>b</code>是一个非静态成员，那么其内存位置必然与<code>a</code>是相邻的。但是<code>a</code>是全局唯一的（对于某个C对象来讲它
+是唯一的，不同的C对象有不同的<code>a</code>），如果<code>b</code>的位置与<code>a</code>相邻，则<code>b</code>也必然是唯一的，这就与其TLS变量
+的身份相冲突了。</p>
+
+<h1 id="tls-3">隐式TLS的实现</h1>
+
+<p>下面介绍的是ELF对TLS的实现，其它对象文件格式的支持也是类似的。</p>
+
+<h2 id="elftls">ELF中的TLS段</h2>
+
+<p>代码中所有的全局变量都存储在<code>.data</code>（静态初始化变量）和<code>.bss</code>（未静态初始化的变量）这两个段，相应地，
+TLS变量分别存储在<code>.tdata</code>（由<code>SHF_PROGBITS</code>+<code>SHF_TLS</code>标记）和<code>.tbss</code>（由<code>SHF_NOBITS</code>+
+<code>SHF_TLS</code>标记）.</p>
+
+<p>与<code>.data</code>不一样的是，运行时程序不会直接访问这些段。在程序启动后，动态链接器会对这两个段进行动态初始化
+（如果有），之后这两个段不再变化，而是作为TLS的<strong>初始化镜像</strong>保存起来。每次启动一个线程时（包括启动
+线程）都会分配TLS块将初始化镜像复制过来。所以每个线程启动时TLS都是相同的。</p>
+
+<p>每个线程的TLS块都是运行时分配的，所以在链接时是不知道其地址的，要访问TLS变量必须借助动态链接器才能计算出
+其地址。链接时只能知道TLS变量在TLS段中的偏移（内存中<code>.tbss</code>紧跟在<code>.tdata</code>后）。</p>
+
+<h2 id="tls-4">TLS的运行时分配</h2>
+
+<p>根据上面的介绍，要访问TLS变量需要确定两个信息：</p>
+
+<ol>
+  <li>定义TLS变量的模块（可执行程序exec或动态共享库DSO）；</li>
+  <li>TLS变量在该模块的TLS段的偏移.</li>
+</ol>
+
+<p>这两个信息在链接时是不知道的，需要动态链接器在运行时计算。然后再根据这两个信息查找这个TLS变量在当前线程
+中的地址，这需要借助如下的数据结构来完成。</p>
+
+<p><img src="/images/tls_data_structure.jpg" title="Fig. 1 Thread-Local Storage data structures" /></p>
+
+<p>$tp_t$表示线程$t$的线程寄存器，指向线程控制块TCB，其在0偏移处指向动态线程向量$dtv_t$. DTV第一个元素
+是一个generation counter，用于判断该DTV是否需要更新，下面会进一步解释；其它元素包含了所有
+该线程用到的模块的TLS块的地址，用模块ID作为下标访问。有些模块的TLS块跟TCB放在一起，是程序启动时就分配
+的（如exec及其依赖的DSO），称为<em>静态模型</em>；有些模块是程序运行中动态加载的（通过<code>dlopen()</code>动态加载），
+TLS块在线程第一次访问时分配，称为<em>动态模型</em>。对于静态模型，在程序启动时动态链接器就可以确定其相对于$tp_t$
+的偏移值，编译器生成代码时可以直接使用这些偏移值来访问。对于动态模型，由于TLS时延迟分配的，需要调用运行时
+系统提供的<code>__tls_get_addr()</code>获取其地址。</p>
+
+<h3 id="section">程序启动</h3>
+
+<p>程序启动时，动态链接器搜集所有模块的TLS信息，包括以下字段：</p>
+
+<ul>
+  <li>TLS初始化镜像的地址</li>
+  <li>TLS初始化镜像的大小</li>
+  <li>模块的偏移值$tlsoffset$</li>
+  <li>是否使用静态模型</li>
+</ul>
+
+<p>动态加载一个模块时也会加入这些信息。线程库将利用这些信息为新建的线程分配TLS块和DTV.  对于使用动态模型和动态
+加载的模块，线程库会延迟分配TLS块，直到第一次访问。</p>
+
+<h3 id="tls-5">延迟分配TLS</h3>
+
+<p>对于延迟分配的TLS，由于其偏移值在启动时未知，必须借助于<code>__tls_get_addr()</code>获取，定义类似如下：</p>
+
+<pre><code class="language-C">struct tls_index {
+    size_t module_id;
+    size_t offset;
+};
+
+void* __tls_get_addr(struct tls_index* ti)
+{
+    // Get the DTV of current thread.
+    dtv_t* dtv = GET_CURRENT_DTV();
+
+    // Check if the DTV is stale, and if so, update it.
+    if (dtv[0].counter != dl_tls_generation) {
+        update_dtv();
+    }
+
+    // Get the TLS block. If not allocated yet, allocate now.
+    char* tls_block = dtv[ti-&gt;module_id];
+    if (tls_block == UNALLOCATED_TLS_BLOCK) {
+        tls_block = dtv[ti-&gt;module_id] = allocate_tls(module_id);
+    }
+
+    return tls_block + ti-&gt;offset;
+}
+</code></pre>
+<p><code>module_id</code>是模块ID，由动态链接器在加载模块时分配，从1开始（exec的模块ID固定是1）。</p>
+
+<p>当动态加载或卸载一个模块时，动态链接器维护的<code>dl_tls_generation</code>会加1，表示模块信息有了变化。由于每个线
+程的DTV时延迟更新的，所以每个线程的<code>dtv[0]</code>也会维护自己的<code>generation counter</code>，用于在访问TLS时判断
+是否需要更新DTV.</p>
+
+<h2 id="tls-6">TLS的访问模式</h2>
+
+<p>上面已经提到过TLS的两种访问模式：静态模式和动态模式，这一节针对不同场景细化为4种模式。对于每一种模式，
+都要求动态链接器在程序启动或动态加载模块时立即处理TLS相关的重定位。TLS的重定位是为了确定模块ID和在TLS块
+中的偏移，然后存储在<code>GOT</code>表中。</p>
+
+<p>模块ID和偏移有时候需要运行时才能确定，有时候链接时即可知道，因此组合起来可分为4种访问模式。具体采用哪种模式
+由编译器和链接器共同决定。</p>
+
+<h3 id="general-dynamic">General Dynamic</h3>
+
+<p>支持访问所有的TLS变量，包括exec和DSO定义的TLS；也支持延迟分配TLS.  这种模式下不需要链接时知道模块ID和
+偏移值。程序启动时动态链接器通过重定向确定模块ID和TLS变量的偏移值，存储在<code>GOT</code>表中。在访问TLS时调用
+<code>__tls_get_addr()</code>，传入这两个参数，获取TLS变量的地址。</p>
+
+<h3 id="local-dynamic">Local Dynamic</h3>
+
+<p>如果链接编辑器确定访问的TLS变量属于本模块（如文件作用域的TLS变量），则采用此模型。TLS变量的偏移值在链接时
+即可确定，只需要调用<code>__tls_get_addr()</code>确定TLS块的地址即可。由于TLS块的地址可以在不同的本地TLS变量
+访问时复用，所以相比于GD模型编译器可利用此模型生成有效的代码减少对<code>__tls_get_addr()</code>的调用次数。例如，在同一个函数
+内访问不同的本地TLS变量，只需要调用一次<code>__tls_get_addr()</code>即可。</p>
+
+<h3 id="initial-exec">Initial Exec</h3>
+
+<p>如果可以确定访问的TLS变量在程序启动时就已分配好，则采用此模型。TLS变量相对于线程寄存器的偏移量可在
+程序启动时由动态链接器计算好存放在GOT表中。访问TLS变量相当于一次间接地址访问，不需要调用<code>__tls_get_addr()</code>.</p>
+
+<h3 id="local-exec">Local Exec</h3>
+
+<p>如果可以确定在exec中访问exec定义的TLS变量，则采用此模型。链接时即可知道TLS变量相对于线程寄存器的偏移量，
+计算其地址相当于寄存器加上一个常量，因此访问TLS变量与访问局部变量没有区别。</p>
+
+<h1 id="per-thread-resource-allocation-pattern">Per-thread resource allocation pattern</h1>
+
+<p>线程局部变量可以有效避免锁竞争，根据上面介绍的TLS实现来看，访问成本与普通变量也差不多，但是它完全防止了
+线程之间的通信，很多时候不满足需求。所以需要在避免竞争与线程通信之间取得平衡，一种常用的模式是每个线
+程分配自己的私有资源以满足大部分需求，只有在必要的时候才与其它线程通信。如下的程序实现了并发统计，在
+线程结束后由主线程汇总打印。</p>
+
+<pre><code class="language-C++">#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;ctime&gt;
+#include &lt;vector&gt;
+
+size_t kNumThreads = 10;
+
+int main()
+{
+    uint32_t stats[kNumThreads];
+    std::vector&lt;std::thread&gt; threads;
+    for (size_t i = 0; i &lt; kNumThreads; ++i) {
+        threads.push_back(
+                std::thread([&amp;, i] {
+                                time_t start = std::time(nullptr);
+                                do_something();
+                                time_t end = std::time(nullptr);
+                                stats[i] = end-start;
+                            }));
+    }
+    for (auto&amp; t : threads) {
+        t.join();
+    }
+    uint32_t total = 0;
+    for (auto t : stats) {
+        total += t;
+    }
+    std::cout &lt;&lt; "total=" &lt;&lt; total &lt;&lt; std::endl;
+    return 0;
+}
+</code></pre>
+
+<p>主线程分配了一个数组，每个元素对应一个子线程，防止线程竞争。这样也方便了子线程将数据传回给主线程。
+如果采用线程私有变量则比较麻烦，必须借助其它全局变量来通信。所以说为了避免竞争并不一定需要线程私有变量。</p>
+
+<p>Linux内核很多统计即采用了这种模式，每个CPU核维护自己的统计数据，需要报告数据时则遍历所有核的数据合计
+输出。著名的内存分配器tcmalloc也采用了这种模式来避免锁竞争，提高并发效率。它针对小内存的分配和释放做
+了优化，小内存从本线程维护的内存池分配，大内存才从全局的内存池分配。同时为防止资源浪费，会在线程之间进行
+内存资源调度，将本线程长期不用的内存转移给其它线程使用。所以说在大多数情况下避免了资源协调。</p>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>如果线程之间完全不需要通信，推荐采用隐式TLS，使用非常方便，也不用担心资源释放的问题。但是如果要自己
+灵活控制TLS资源的释放，则可以考虑采用显示TLS，推荐使用Boost库，可省不少心。</p>
+
+<p>如果线程之间多少是需要通信的，不建议TLS，建议还是用共享数据结构加锁保护。为了提高性能可考虑使用原子变
+量或者无锁数据结构。最终极的优化方法还是优化多线程的交互结构，尽量减少线程间通信。</p>
+
+<h1 id="references">References</h1>
+
+<ul>
+  <li><a href="https://uclibc.org/docs/tls.pdf">ELF Handling of Thread-Local Storage</a></li>
+  <li><a href="https://docs.oracle.com/cd/E19683-01/817-3677/chapter8-tbl-1/index.html">Linkers and Libraries Guide</a></li>
+  <li><a href="http://david-grs.github.io/tls_performance_overhead_cost_linux/">TLS performance overhead and cost on GNU/Linux</a></li>
+  <li><a href="http://blog.csdn.net/chosen0ne/article/details/9338591">TCMalloc小记</a></li>
+  <li><a href="http://www.boost.org/doc/libs/1_65_1/doc/html/thread/thread_local_storage.html">Boost Thread Local Storage</a></li>
+</ul>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2017-12-01T21:08:54+08:00'><span class='date'>2017-12-01</span> <span class='time'>9:08 pm</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/computer-system/'>computer system</a>, <a class='category' href='/blog/categories/concurrent-programming/'>concurrent programming</a>, <a class='category' href='/blog/categories/programming-language/'>programming language</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2014/09/03/using-feature-flags-enable-concurrent-dev/" title="Previous Post: 使用Feature Flags进行并行开发和持续集成">&laquo; 使用Feature Flags进行并行开发和持续集成</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2017/12/02/unix-signals/" title="Next Post: UNIX信号">UNIX信号 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

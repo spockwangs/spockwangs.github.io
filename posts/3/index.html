@@ -1,0 +1,600 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Primitive types, Operators, and Conversions == tests object identity (whether the variable references the
+same object), not content identity ( &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/posts/3/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div class="blog-index">
+  
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/05/13/java-gotchas-2/">Java Gotchas</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-05-13T00:00:00+08:00'><span class='date'>2012-05-13</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/05/13/java-gotchas-2/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h2 id="primitive-types-operators-and-conversions">Primitive types, Operators, and Conversions</h2>
+
+<p><code>==</code> tests object identity (whether the variable references the
+same object), not content identity (consider <code>equals()</code>
+instead).
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/05/13/java-gotchas-2/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/05/13/c-gotchas/">C Gotchas</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-05-13T00:00:00+08:00'><span class='date'>2012-05-13</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/05/13/c-gotchas/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p><code>+</code>, <code>-</code> have higher precedence than <code>&gt;&gt;</code>, <code>&lt;&lt;</code>.
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/05/13/c-gotchas/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/03/tcp-faq/">TCP FAQ</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/02/03/tcp-faq/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h2 id="mssmaximum-segment-size">什么是MSS(Maximum Segment Size)?</h2>
+
+<p>TCP用MSS选项允许接收方指定它可以接收的最大段长度。传输的双方通过这个选项协商
+出一个上方都接受的最大段长。这个值太大或太小都不好。太小使得每次传输的净荷数
+据太少，带宽使用率不高。太大会使得IP帧太大。这样的帧碰到具有较小的MTU的网络
+时不得不分片。这些片段中只要有一个超时都会导致整个帧重传。重传的概率随片段的
+增加而增加。MSS最好等于路径MTU（path MTU）。
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/02/03/tcp-faq/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/03/print-helix-matrix/">打印螺旋矩阵</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/02/03/print-helix-matrix/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>螺旋矩阵是一个nxn的方阵，其中元素为自然数，但像螺旋方向一样递增。举例如下：</p>
+
+<p>若n = 3，螺旋矩阵为：
+    1   2   3
+    8   9   4
+    7   6   5
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/02/03/print-helix-matrix/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/03/notes-on-tcp/">TCP协议浅析</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/02/03/notes-on-tcp/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h2 id="section">简介</h2>
+
+<p>应用程序通常都需要从一个主机传送大量的数据到另一个主机。采用不可靠的传输机制
+会使程序变得异常复杂和困难，因为程序需要检测传输错误和重传丢失的数据等。因此
+迫切地需要一种能解决可靠性传输问题的通用机制，这就是TCP诞生的目的。有了这样
+一个协议就使得应用程序无需考虑网络的各种细节。
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/02/03/notes-on-tcp/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/03/ftp-active-and-passive-mode/">FTP的主动和被动模式</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/02/03/ftp-active-and-passive-mode/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>FTP是仅基于TCP的服务，不支持UDP。与众不同的是FTP使用2个端口，一个数据端口和
+一个命令端口（也可叫做控制端口）。通常来说这两个端口是21（命令端口）和20（数
+据端口）。但FTP工作方式的不同，数据端口并不总是20。这就是主动与被动FTP的最大
+不同之处。
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/02/03/ftp-active-and-passive-mode/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/03/epigrams-on-programming/">Epigrams on Programming</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/02/03/epigrams-on-programming/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Controlling complexity is the essence of computer programming.<br />
+– p.319, <em>Software Tools</em>
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/02/03/epigrams-on-programming/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/03/data-alignment/">数据对齐</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/02/03/data-alignment/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><h2 id="section">为什么要数据对齐？</h2>
+
+<p>所谓数据对齐是指访问数据的地址要满足一定的条件，能被这个数据的长度所整除。例
+如，1字节数据已经是对齐的，2字节的数据的地址要被2整除，4字节的数据地址要
+被4整除。
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/02/03/data-alignment/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/03/cpp-new-and-delete/">C++的new和delete运算符与内存分配函数和释放函数</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/02/03/cpp-new-and-delete/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>我曾经碰到下面一段代码：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="kt">int</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="n">new</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>编译通不过，提示说是<code>new</code>运算符语法错误。但若换成如下：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="kt">int</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="n">operator</span> <span class="n">new</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>编译顺利通过。一时不得其解。前一句代码显然是调用new运算符；后一句看起来也像
+是调用<code>new</code>运算符，毕竟其它运算符可以这样调用。
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/02/03/cpp-new-and-delete/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  
+    <article>
+      
+  <header>
+    
+      <h1 class="entry-title"><a href="/blog/2012/02/02/genenerate-executable-library/">生成可执行的共享库</a></h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-02T00:00:00+08:00'><span class='date'>2012-02-02</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="/blog/2012/02/02/genenerate-executable-library/#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+  <div class="entry-content"><p>Linux系统下共享对象文件和可执行文件的格式都是ELF格式，它们并没有什么本质 上
+的区别。共享对象文件也是可以执行的。例如Linux下动态链接器ld-linux.so就 是共
+享对象文件，它也可以像可执行文件一样执行；Glibc库函数也是一样。
+</div>
+  
+  
+    <footer>
+      <a rel="full-article" href="/blog/2012/02/02/genenerate-executable-library/">Read on &rarr;</a>
+    </footer>
+  
+
+
+    </article>
+  
+  <div class="pagination">
+    
+      <a class="prev" href="/posts/4">&larr; Older</a>
+    
+    <a href="/blog/archives">Blog Archives</a>
+    
+    <a class="next" href="/posts/2">Newer &rarr;</a>
+    
+  </div>
+</div>
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

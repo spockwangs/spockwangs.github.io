@@ -1,0 +1,1211 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Computer System | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/computer-system/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[分布式系统的分区管理]]></title>
+    <link href="http://spockwangs.github.io/blog/2018/01/03/cluster-membership-protocol/"/>
+    <updated>2018-01-03T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2018/01/03/cluster-membership-protocol</id>
+    <content type="html"><![CDATA[<p>当数据量大到单机存不下时就需要分布式存储系统。分布式存储与单机存储最大的区别就是把数据按一定规则切分
+为多个部分，每个机器只存储其中一部分，这样理论上来讲分布式存储可以应付无穷大的数据量。但是这里带来一
+个新的问题，即如何找到我需要的数据是存储在哪台机器呢？这就是分布式系统的分区管理模块需要解决的问题，
+除了这个问题外，还需要解决负载均衡和容灾的问题。</p>
+
+<p>分区管理是有一定成本的，随机器数量增加而增加，所以分布式存储的伸缩性不是无穷的，伸缩能力主要取决于
+分区管理。所以分区管理是分布式系统中相当重要的模块。</p>
+
+<p>本文将介绍分区管理的一般解决思路，并介绍实际的分布式系统的解决方案，最后总结不同需求场景下应采用的
+解决方案。
+<!--more--></p>
+
+<h2 id="section">分区管理应该解决的问题</h2>
+
+<p>分区管理主要解决以下问题：</p>
+
+<ol>
+  <li>分区，如何将数据集且分为多个分区？</li>
+  <li>路由
+    <ol>
+      <li>如何找到分区所在节点？</li>
+      <li>如何保证路由信息的一致性？比如，如何解决客户端缓存的过期路由信息？如果读写请求因为过期的路由信息
+由错误的节点处理，可能导致数据丢失。</li>
+    </ol>
+  </li>
+  <li>容灾
+    <ol>
+      <li>如何检测节点的失败？</li>
+      <li>节点失败多种多样，基本可分为两种情况：短暂的失败和长期失败。短暂的失败可能是由于临时过载处理不
+及时导致的，长期失败可能是硬件故障导致的，短期无法恢复。针对这两种失败应采用不同的容灾策略。</li>
+    </ol>
+  </li>
+</ol>
+
+<h2 id="section-1">分区</h2>
+
+<p>数据通常都有唯一标识，也就是key，所以我们可以根据key来切分数据，通常有以下的切分方案：</p>
+
+<ul>
+  <li>根据key的范围来划分
+    <ul>
+      <li>优点：可执行按范围查询</li>
+      <li>缺点：可能分布不均匀，可以结合时间戳或者数据来源进一步分区来缓解</li>
+    </ul>
+  </li>
+  <li>根据key的hash来划分
+    <ul>
+      <li>优点：hash可将不均匀的key转换为均匀的数字，所以分布是均匀的</li>
+      <li>缺点：只能精确查找，无法按范围查询。不过可以设计聪明的hash算法来执行模糊匹配，比如GeoHash可用来
+查询附近的地理位置。</li>
+      <li>例子：一致性hash</li>
+    </ul>
+  </li>
+</ul>
+
+<h2 id="section-2">路由</h2>
+
+<h3 id="section-3">路由策略</h3>
+
+<p>路由要解决的问题是讲分区映射到节点上，通常需要考虑以下几个需求：</p>
+
+<ol>
+  <li>分区尽量均匀分布到节点上；</li>
+  <li>在进行负载均衡操作时，分区仍然是可用的；</li>
+  <li>负载均衡时移动的数据量尽量少.</li>
+</ol>
+
+<p>一种容易想到的映射方案是将分区hash对节点数量取模，这种分区方案严重依赖节点的数量。当节点数量变化时，所有
+分区到节点的映射都要发生变化，不满足上述的第3点要求，所以不建议使用。</p>
+
+<p>常见的路由策略有两种：</p>
+
+<ol>
+  <li>查表
+    <ul>
+      <li>分区到节点的映射存储在一张表里</li>
+    </ul>
+  </li>
+  <li>伪随机算法
+    <ul>
+      <li>分区到节点的映射通过一个伪随机算法计算，如Ceph的CRUSH算法。</li>
+      <li>优点：路由信息的空间复杂度只跟节点数量有关，存储空间小</li>
+    </ul>
+  </li>
+</ol>
+
+<h3 id="section-4">路由信息的一致性</h3>
+
+<p>另一个问题是如何保证路由信息的一致性：如果读写请求由于过期的路由信息发送到错误的节点，轻则导致读到
+错误的数据（比如请求的key不是由该节点负责，所以该节点返回找不到这个key，其实系统中是有这个key的），
+重则导致数据写到错误的节点上，最终数据被丢弃。</p>
+
+<p>权威的路由信息一定会存储在某些节点上，根据存储节点的不同可分为一些两种：</p>
+
+<ol>
+  <li>中心化路由
+    <ul>
+      <li>路由信息储存在某些特殊的节点上，他们构成路由层，专门转发客户端的路由请求.</li>
+      <li>例如，GFS的路由信息存储在主节点上；BigTable的路由信息由Chubby服务来维护；MongoDB的客户端请求由
+路由节点转发，其路由信息由一组配置服务器维护；Ceph的路由信息由一组Monitor节点维护，Monitor集群采
+用Paxos协议保证路由信息的一致性和可靠性。</li>
+    </ul>
+  </li>
+  <li>去中心化路由
+    <ul>
+      <li>每个节点都存储路由信息的一部分或全部，由所有节点共同维护，他们之间通过一种复制协议（比如Gossip
+协议）来保证一致性，所有节点均可路由客户端请求。</li>
+      <li>最典型的例子就是Dynamo，所有节点存储了完整的路由信息，通过Gossip协议保证路由信息的最终一致。
+ Cassandra, CouchDB, Voldemort和Redis Cluster也采用了类似的方案。</li>
+    </ul>
+  </li>
+</ol>
+
+<p>采用去中心化路由的好处是更好的可用性，任何节点均可单独转发客户端请求。若采用中心化的方式，路由层若发生
+故障将导致系统不可用，例如BigTable的可用性将直接受到Chubby的限制，而Dynamo就没有此问题，除非其所有节点
+均不可用（BigTable的可用性不超过4个9，而Dynamo的可用性可达到5个9）。</p>
+
+<p>不管采用哪种路由存储方式，均无法保证客户端路由信息与系统的完全一致。当客户端从系统获取到路由信息后到
+访问数据这段时间，路由信息此时可能已经发生了变化（节点的状态随时可能变化）。为了容灾，数据的分布必须
+随节点状态的变化而变化，不可能在客户端访问数据期间将路由信息锁定起来，因而不能严格保证客户端的路由信息
+与系统完全一致。我们只要能保证在客户端的路由信息错误时能够纠正即可。一般采用如下两种方式来解决这个问题：</p>
+
+<ul>
+  <li>数据节点具有其自身负责的分区的权威信息。若客户端请求的key不由其负责，则返回路由错误给客户端，由其
+重新刷新路由信息重试（如BigTable）；或者数据节点有完整的路由信息，直接将其请求转发给正确的节点
+（如Dynamo）.</li>
+  <li>数据节点与其它节点发生网络分区了，导致其负责的分区信息本身已经过时，而客户端的路由信息与其刚好一致，
+此时数据节点无法判断客户端的路由错误。为了防止这种情况的发生，在新节点接管该节点的分区前必须保证旧节点
+不再处理客户端的请求。例如，Ceph和BigTable都采用租约机制来保证旧节点一定不会处理客户端的请求。</li>
+</ul>
+
+<p>还有些系统本身是容忍部分数据丢失的，因而也没有机制保证客户端路由信息的一致性，比如Redis Cluster，当
+客户端访问的数据节点与其它节点发生网络分区时（此时客户端和数据节点的路由信息都是旧的并可能相同）
+会依然接受读写请求，直到它检测到了网络分区为止，这段时间写的数据将在主节点迁移后丢失。</p>
+
+<h3 id="section-5">路由转发</h3>
+
+<p>路由的转发直接影响到请求处理的延迟，转发次数过多会导致延迟过高，而且延迟也不稳定。转发方式可分为3种：</p>
+
+<ol>
+  <li>客户端直接转发
+    <ul>
+      <li>客户端可缓存或预取路由信息，此后将直接路由请求给正确的节点，可最大程度减少转发次数。即使路由信息
+过期也可以通过系统的转发纠正。</li>
+      <li>客户端逻辑会比较复杂，通常这部分逻辑会以客户端库的形式由系统提供，编译链接到应用程序。</li>
+    </ul>
+  </li>
+  <li>路由层转发
+    <ul>
+      <li>如果由于某种场景限制无法使用客户端库，可由负载均衡器来实现路由功能.</li>
+    </ul>
+  </li>
+  <li>数据节点转发
+    <ul>
+      <li>对于采用去中心化的路由存储可由数据节点转发.</li>
+    </ul>
+  </li>
+</ol>
+
+<p>一般来讲，路由转发的策略与路由一致性的解决方案有关，中心化的路由一般可支持客户端转发和路由层转发，去
+中心化的路由可支持以上3种，比如Voldemort可配置以上3种方案。</p>
+
+<h2 id="section-6">容灾</h2>
+
+<p>容灾的第一步是检测失败节点，不管是什么检测算法都需要发送心跳，所以检测的通信模式将直接制约系统的可伸缩
+性。根据心跳的通信模式分为3种：</p>
+
+<ol>
+  <li>星形模式
+    <ul>
+      <li>主节点定期发送心跳给数据节点，数据节点也可发送心跳给主节点</li>
+      <li>例子：GFS, BigTable, ElasticSearch</li>
+    </ul>
+  </li>
+  <li>全连通模式
+    <ul>
+      <li>所有节点相互之间发送心跳</li>
+      <li>例子：Dynamo, Cassandra, Redis Cluster</li>
+    </ul>
+  </li>
+  <li>分组模式
+    <ul>
+      <li>仅某个分区的副本节点之间发送心跳</li>
+      <li>例子：Ceph, MongoDB</li>
+    </ul>
+  </li>
+</ol>
+
+<p>很明显，星形模式对主节点的负担比较重，可伸缩性完全由主节点制约。全连通模式的通信量比较大，伸缩性也会
+有所限制，但是其可用性比较好，因为所有节点均可作为备胎用于数据迁移，只要有一个节点可用，整个系统就可用。
+分组模式的伸缩性是最好的，节点数的增多不会引起通信量增加，同时若其数据可在整个集群间迁移，其可用性也
+非常好。</p>
+
+<p>大多数系统的失败检测是周期性运行的，不过Dynamo和Cassandra的失败检测是客户端驱动的，因此检测算法的触发
+方式分两种：</p>
+
+<ol>
+  <li>周期性触发
+    <ul>
+      <li>大多数系统是这种</li>
+    </ul>
+  </li>
+  <li>客户端驱动
+    <ul>
+      <li>Dynamo和Cassandra</li>
+    </ul>
+  </li>
+</ol>
+
+<p>节点失败的原因有很多，有些是短暂的，有些是永久的，检测算法一般无法区分这两者，所以在处理失败时必须有
+所权衡，既不能太敏感也不能过于迟钝，否则会导致失败处理不及时或者系统不稳定。所以检测到失败后还必须权
+衡失败的性质然后再处理。有的系统是用中心化的方式来判断失败的性质，有些是用去中心化的方式，所以基本可
+分为两种：</p>
+
+<ol>
+  <li>中心化检测
+    <ul>
+      <li>检测结果上报到某个节点或者监控集群进行全局性判断是否需要进行数据迁移.</li>
+      <li>GFS, BigTable, Ceph, ElasticSearch, Redis Cluster</li>
+    </ul>
+  </li>
+  <li>去中心化检测
+    <ul>
+      <li>本地自行判断，由于缺乏全局信息，仅可处理短暂失败，长期失败需要人工干预.</li>
+      <li>Dynamo, Cassandra</li>
+    </ul>
+  </li>
+</ol>
+
+<p>对于短暂失败一般通过重试或者hinted handoff解决。永久性失败必须迁移数据。有些系统需要人为干预来迁移，
+比如Dynamo和Cassandra.</p>
+
+<h2 id="section-7">案例介绍</h2>
+
+<p>本节将重点介绍几个著名的分布式系统的实际例子，它们对许多系统的设计都有很大影响，了解这几个系统的设计
+方案将有助于了解其它系统，也可在自己设计系统时参考。</p>
+
+<h3 id="gfs">GFS</h3>
+
+<p>GFS是Google设计的分布式文件系统，将多个机器的硬盘抽象成了一个硬盘。由一个主节点、多个数据节点和客户端
+库组成。主节点负责维护全局的路由信息，并检测数据节点的状态。数据节点负责数据的可靠存储。客户端负责读写
+请求，从主节点拉取路由信息。</p>
+
+<p>由于只需要根据文件名来查找所以采用Hash分区。并采用动态路由策略。路由信息采用中心化方式，便于全局协调。
+节点的状态监测采用星形通信模式和中心化监测机制。很容易看出，单一的主节点是容量瓶颈和系统的风险点。后来
+Google增加了主节点的冷备来防止单点风险，但是仍然解决不了容量问题。之所以采用这样的中心化架构就是因为
+实现简单。</p>
+
+<h3 id="bigtable">BigTable</h3>
+
+<p>GFS存储的是非结构化数据，不方便查询。BigTable是基于GFS设计的结构化存储系统，支持列式数据模型。其架构
+类似于GFS，包括一个主节点、多个数据节点和客户端库。主节点负责维护全局路由信息，它存储在Chubby上，并
+周期性检测数据节点的状态。数据节点负责客户端的读写请求，而数据是存储在GFS。</p>
+
+<p>由于需要支持按范围查询，所以采用范围分区方案。分区的大小可根据数据量动态调整，拆分或合并。与GFS一样采用
+中心化路由。为了保证路由信息的一致性，必须保证任意时刻每个分区只有一个数据节点可访问，BigTable用租约
+机制来保证这一点（基于Chubby的带超时的锁）。数据节点的状态由主节点周期性检测，若失败则调整路由信息由
+新节点来接管之前的分区。</p>
+
+<p>虽然主节点只有一个，但并不会过于影响可用性，因为客户端的访问路径并不经过主节点，而是从Chubby获取路由
+信息。主节点只是负责检测数据节点的状态、负载均衡等。但是如果主节点长期故障将影响可用性。</p>
+
+<h3 id="dynamo">Dynamo</h3>
+
+<p>Dynamo是Amazon设计的用于存储用户购物车的分布式存储系统，主要强调可用性。所以其设计思路与以上两个系统
+有很大的区别。它是一个完全去中心化的架构，所有节点都是数据节点，角色完全对称，不存在特殊的节点。客户端
+可访问任何节点进行读写，只要有一个节点存活则整个系统就是可用的。</p>
+
+<p>由于不需要按范围查询并为了保证数据分布均匀，采用hash分区。为了保证路由信息变化时数据迁移量尽量小，采用
+一致性Hash方案。所有节点存储全局的路由信息，并通过Gossip协议维护最终一致性。所有节点相互之间检测状态，
+由客户端驱动，本地化决策，可容忍短暂的失败。长期的节点失败由人工干预解决。</p>
+
+<p>正是由于采用了完全去中心化的架构，其可用性达到了惊人的5个9.</p>
+
+<h3 id="cassandra">Cassandra</h3>
+
+<p>Cassandra是Facebook开发的高可用存储系统，用于其消息搜索。它结合了BigTable的数据模型和Dynamo的分区管
+理方案，也是一个完全去中心化的架构。与Dynamo相比，只是在一致性hash和多版本冲突解决等细节上有区别。</p>
+
+<h3 id="ceph">Ceph</h3>
+
+<p>Ceph也是一个分布式文件系统，强调伸缩性。由客户端库、一小组Monitor集群和许多OSD组成。Monitor集群维护全局的
+OSD拓扑结构，在节点失败时调整拓扑结构。Monitor集群运行Paxos协议来保证拓扑结构的一致性和可靠性。Monitor集群的
+拓扑结构信息通过类似Gossip的协议传递给所有OSD。OSD负责数据存储及复制，处理读写请求，相互之间检测心跳
+状态，并在节点失败时迁移数据等。</p>
+
+<p>由于只需要支持精确查找，Ceph采用按hash分区。分区大小不可自动调整，但可以人工增加。Ceph最具创新的地方
+是其路由算法，跟其它系统不同的是，分区到节点的映射不是查表而是伪随机算法CRUSH计算出来的，具有以下特点：</p>
+
+<ol>
+  <li>根据key、拓扑结构和分配规则即可算出节点地址；</li>
+  <li>确定性：相同的输入产生相同的输出；</li>
+  <li>一定程度上保证分区的分布是均匀的，并可考虑到节点的网络层次结构；</li>
+  <li>当拓扑结构发生变化时数据迁移量很小。</li>
+</ol>
+
+<p>由于CRUSH算法的支持，路由信息只需要存储拓扑结构就可以了，其存储空间只与OSD的数量有关，而与分区数量无关，
+大大减小了需要的存储量，有助于伸缩性的实现。</p>
+
+<p>与BigTable类似，Ceph采用租约机制保证路由信息的一致性。</p>
+
+<p>Ceph的心跳检测是分组模式，即保存同一分区的OSD之间发送心跳，当发现节点失败时请求Monitor集群更新拓扑结构
+重新分布数据。分组模式有助于减小通行量，增加了伸缩性。同时为了减小Monitor集群的负载，更新拓扑结构的请求
+会合并批量上报给Monitor集群。</p>
+
+<p>与GFS相比，Ceph提高伸缩性的策略有：</p>
+
+<ol>
+  <li>分区的粒度更粗，路由信息更小，增加了系统容量
+    <ul>
+      <li>GFS的分区粒度是文件，Ceph的一个分区可存储多个文件，粒度由分区的数量决定，这样有助于减小路由信息，
+使得中心化的路由节点可支持更多数据。</li>
+      <li>Ceph采用CRUSH算法计算路由信息，进一步压缩了路由信息。</li>
+    </ul>
+  </li>
+  <li>路由信息扩散至所有数据节点，可以让数据节点承担更多工作（包括数据复制、失败检测及恢复、负载均衡），
+减轻Monitor集群的压力
+    <ul>
+      <li>GFS的路由信息仅存储在主节点，导致许多管理工作只能由主节点来负责，成为性能瓶颈。</li>
+    </ul>
+  </li>
+</ol>
+
+<h2 id="conclusion">Conclusion</h2>
+
+<p>综合以上几个例子可以看出，设计分布式系统基本有两种思路：中心化和去中心化架构。中心化架构比较简单，容
+易实现，而且由于有全局信息便于全局协调，包括数据分布、负载均衡、数据迁移等。为了防止中心节点成为性能
+瓶颈，通常将控制逻辑和数据逻辑分离，只有控制逻辑经过中心节点，而数据逻辑尽量直接与数据节点通信。比如，
+尽量让客户端缓存路由信息，防止每次都要访问中心节点。Ceph是一个极好的案例，尽量让数据节点分担管理工作，
+有助于高伸缩性的实现。完全的去中心化架构任何模块都没有单点风险，拥有极好的可用性，但是实现比较复杂，
+因此很少系统采用。由于其节点的功能是对称的，所以负载分布也较为均匀，没有节点会因为承担更多的工作而成
+为性能瓶颈，可伸缩性也很好。</p>
+
+<p>设计分布式系统时一个重要的考虑是CAP理论，其中P代表分区容忍性，这个是世界的现实，无法绕过去，所以只能
+在一致性和可用性之间进行权衡。强调可用性的系统可参考Dynamo的解决方案，采用去中心化的架构。而强调一致
+性的系统则建议采用中心化架构，因为一致性必然涉及到多个节点的协调，若维护有一个全局信息将更方便进行协
+调。</p>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li>The Google File System</li>
+  <li>Ceph: A Scalable, High-Performance Distributed File System</li>
+  <li>Dynamo: Amazon’s Highly Available Key-value Store</li>
+  <li>Cassandra - A Decentralized Structured Storage System</li>
+  <li>RADOS: A Scalable, Reliable Storage Service for Petabyte-scale Storage Clusters</li>
+  <li>Bigtable: A Distributed Storage System for Structured Data</li>
+</ul>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[线程私有存储]]></title>
+    <link href="http://spockwangs.github.io/blog/2017/12/01/thread-local-storage/"/>
+    <updated>2017-12-01T21:08:54+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2017/12/01/thread-local-storage</id>
+    <content type="html"><![CDATA[<h1 id="introduction">Introduction</h1>
+
+<p>线程私有变量（Thread Local Storage）之于线程相当于静态变量之于进程，与进程变量相比是每个线程都有一份，
+也就是所谓的“私有”。也可以把线程私有变量理解为key-value对，其中key是线程ID。它的主要作用是在多线程编程
+中避免锁竞争的开销。本文将重点介绍线程私有变量的几种形式、用法及其背后的实现原理。
+<!--more--></p>
+
+<h1 id="tls">显示TLS</h1>
+
+<p>POSIX线程库提供了如下API管理TLS：</p>
+
+<ul>
+  <li><code>pthread_key_create()</code>
+    <ul>
+      <li>创建一个TLS变量，并设置析构函数</li>
+    </ul>
+  </li>
+  <li><code>pthread_setspecific()</code>
+    <ul>
+      <li>给TLS变量赋值</li>
+    </ul>
+  </li>
+  <li><code>pthread_getspecific()</code>
+    <ul>
+      <li>获取TLS变量的当前值</li>
+    </ul>
+  </li>
+  <li><code>pthread_key_delete()</code>
+    <ul>
+      <li>回收TLS变量，但是注意并不调用TLS的析构函数</li>
+    </ul>
+  </li>
+</ul>
+
+<p>下面是一个简单的例子。</p>
+
+<pre><code class="language-c++">#include &lt;pthread.h&gt;
+#include &lt;thread&gt;
+#include &lt;cassert&gt;
+#include &lt;iostream&gt;
+
+using namespace std;
+
+void cleanup(void* p)
+{
+    cout &lt;&lt; "clean" &lt;&lt; endl;
+    int* pi = reinterpret_cast&lt;int*&gt;(p);
+    delete pi;
+}
+
+int main()
+{
+    pthread_key_t tls_key;
+    int err = pthread_key_create(&amp;tls_key, cleanup);
+    assert(err == 0);
+    std::thread([=] {
+                    void* p = pthread_getspecific(tls_key);
+                    // 还没设置过值，所以是空指针。
+                    assert(p == nullptr);
+                    p = new int(3);
+                    int err = pthread_setspecific(tls_key, p);
+                    assert(err == 0);
+                    p = pthread_getspecific(tls_key);
+                    int a = *reinterpret_cast&lt;int*&gt;(p);
+                    assert(a == 3);
+                }).join();
+    void *p = pthread_getspecific(tls_key);
+    // 主线程的TLS与子线程是分开的，所以还是空指针。
+    assert(p == nullptr);
+    
+    // 由于子线程已退出，所以这里可以回收|tls_key|了。
+    err = pthread_key_delete(tls_key);
+    assert(err == 0);
+    return 0;
+}
+</code></pre>
+
+<p>有几个值得注意的地方：</p>
+
+<ul>
+  <li><code>pthread_key_delete()</code>不会自动调用每个线程TLS变量的析构函数，而且在回收key后线程在退出时也不会再调
+用析构函数，所以必须要确定: 1) 所有线程已经析构TLS变量（要么显示析构，要么线程退出，像上面的例子）; 2)而且不再使用
+该key时才能回收这个key.  这两个条件一般难以确定，所以实际使用时一般也不会回收key.</li>
+  <li><code>pthread_setspecific()</code>在覆盖之前的value时不会主动调用析构函数，调用线程必须自己保证释放资源。</li>
+  <li>TLS key的个数是有限的，通过<code>PTHREAD_KEYS_MAX</code>(limits.h)获取（在我电脑上是512）。下面我会
+讲到如何突破这个限制。</li>
+</ul>
+
+<h1 id="tls-1">显示TLS的实现</h1>
+
+<p>在Linux中每个进程有一个全局的数组管理TLS key，定义类似如下：</p>
+
+<pre><code class="language-cpp">struct pthread_key_struct {
+    uintptr_t seq;
+    void (*destructor)(void*);
+} __pthread_keys[PTHREAD_KEYS_MAX];
+</code></pre>
+
+<p>每个元素用于存储key的序列号（用于判断key是否有效，下面解释）和其对应的析构函数。序列号初始值为0.
+<code>pthread_create_key()</code>会从该数组中找到一个还未分配的元素，将其序列号加1，记上析构函数地址，并将其下标
+作为TLS key返回。那么如何判断一个key是否已分配呢？</p>
+
+<pre><code class="language-C++">#define KEY_UNUSED(seq) (((seq) &amp; 1) == 0)
+</code></pre>
+<p>若序列号为偶数则表示未分配，分配时将其加1变成奇数即可。这个操作采用原子CAS来完成，以保证线程安全。在
+<code>pthread_key_delete()</code>时也会将序列号加1，表示可以继续使用，通过序列号机制来保证回收的key不会被复用
+（复用的key会导致线程在退出时可能会调用错误的析构函数）。但是一直加1会导致序列号回绕，还是会复用key。
+所以创建key时会检查是否有回绕风险，如果有则创建失败。</p>
+
+<pre><code class="language-C++">#define KEY_USABLE(seq) (((uintptr_t)(seq)) &lt; ((uintptr_t) ((seq) + 2)))
+</code></pre>
+
+<p>每个线程都有一个自己的线程控制块TCB（管理寄存器、线程栈等），里面有一个TLS数组(我的电脑上是32个元素）
+用于存放线程私有变量。TLS数组的每个元素定义类似如下：</p>
+
+<pre><code class="language-C++">struct pthread_key_data {
+    uintptr_t seq;
+    void* data;
+};
+</code></pre>
+<p>上面提到过<code>pthread_key_create()</code>返回的TLS key其实是<code>__pthread_keys</code>数组的下标。
+<code>pthread_setspecific()</code>根据TLS key定位TLS数组的一个元素，并设置其序列号seq和数据指针。
+如果这个数组不够用，则会再动态分配一个二级数组（在我的电脑上是一个32x32的稀疏数组）。
+线程退出时，<code>pthread_key_data</code>中的序列号用于判断该key是否仍在使用中（即与<code>__pthread_keys</code>中
+的同一个下标对应的序列号是否相同），若是则调用TLS的析构函数。</p>
+
+<h2 id="boosttls">Boost的TLS实现</h2>
+
+<p>为了突破POSIX线程库对TLS变量个数的限制，<code>boost::thread_specific_ptr</code>只需要创建一个key，并设置该
+key对应的TLS变量指向一个<code>map</code>，这样可以在该<code>map</code>中存放无数个（仅受内存限制）TLS变量。</p>
+
+<p>另外<code>boost::thread_specific_ptr</code>的<code>reset()</code>可规避<code>pthread_setspecific()</code>忘记释放资源的坑。
+不过<code>boost::thread_specific_ptr</code>的析构函数的执行时机也有与<code>pthread_key_delete()</code>一样的限制。</p>
+
+<h1 id="tls-2">隐式TLS</h1>
+
+<p>相比于上面显示TLS需要动态调用API构造线程私有变量，隐式TLS更加方便，采用编程语言提供的关键字声明即可。
+下面是采用C++11的关键字<code>thread_local</code>重写上面的程序。</p>
+
+<pre><code class="language-C++">#include &lt;thread&gt;
+#include &lt;cassert&gt;
+#include &lt;memory&gt;
+
+using namespace std;
+
+int main()
+{
+    thread_local unique_ptr&lt;int&gt; tls_int_ptr;
+    std::thread([] {
+                    tls_int_ptr.reset(new int(3));
+                    assert(*tls_int_ptr == 3);
+                }).join();
+    // 主线程的TLS与子线程是分开的，所以还是空指针。
+    assert(tls_int_ptr == nullptr);
+    return 0;
+}
+</code></pre>
+
+<p><code>thread_local</code>声明的变量在线程启动时构造，并在线程退出时析构。而且不像POSIX的TLS，没有数量限制。但是
+其析构的时机没法动态控制。</p>
+
+<h2 id="threadlocal">为什么<code>thread_local</code>不能是非静态变量</h2>
+
+<p>根据C++11标准，<code>thread_local</code>变量必须是静态变量（名字空间变量、函数静态变量或者类的静态成员变量），不
+能是类的非静态成员。例如，下面的代码是非法的:</p>
+
+<pre><code class="language-C++">class C {
+    int a;
+    thread_local int b;
+};
+</code></pre>
+<p>必须如下声明<code>b</code>是静态成员变量：</p>
+
+<pre><code class="language-C++">class C {
+    int a;
+    thread_local static int b;
+};
+</code></pre>
+<p>这有时候确实不方便，因为我们希望每个<code>C</code>对象都有自己的成员副本<code>b</code>，不过这可以用下面的方法规避这个问题：</p>
+
+<pre><code class="language-C++">class C {
+    int GetBPerThread()
+    {
+        return b_map[this];
+    }
+
+    int a;
+    thread_local static std::map&lt;void*, int&gt; b_map;
+};
+</code></pre>
+
+<p>既然可以规避，那为啥标准不直接支持呢？这是因为TLS变量的内存布局与类的非静态成员不兼容导致的。假设
+<code>b</code>是一个非静态成员，那么其内存位置必然与<code>a</code>是相邻的。但是<code>a</code>是全局唯一的（对于某个C对象来讲它
+是唯一的，不同的C对象有不同的<code>a</code>），如果<code>b</code>的位置与<code>a</code>相邻，则<code>b</code>也必然是唯一的，这就与其TLS变量
+的身份相冲突了。</p>
+
+<h1 id="tls-3">隐式TLS的实现</h1>
+
+<p>下面介绍的是ELF对TLS的实现，其它对象文件格式的支持也是类似的。</p>
+
+<h2 id="elftls">ELF中的TLS段</h2>
+
+<p>代码中所有的全局变量都存储在<code>.data</code>（静态初始化变量）和<code>.bss</code>（未静态初始化的变量）这两个段，相应地，
+TLS变量分别存储在<code>.tdata</code>（由<code>SHF_PROGBITS</code>+<code>SHF_TLS</code>标记）和<code>.tbss</code>（由<code>SHF_NOBITS</code>+
+<code>SHF_TLS</code>标记）.</p>
+
+<p>与<code>.data</code>不一样的是，运行时程序不会直接访问这些段。在程序启动后，动态链接器会对这两个段进行动态初始化
+（如果有），之后这两个段不再变化，而是作为TLS的<strong>初始化镜像</strong>保存起来。每次启动一个线程时（包括启动
+线程）都会分配TLS块将初始化镜像复制过来。所以每个线程启动时TLS都是相同的。</p>
+
+<p>每个线程的TLS块都是运行时分配的，所以在链接时是不知道其地址的，要访问TLS变量必须借助动态链接器才能计算出
+其地址。链接时只能知道TLS变量在TLS段中的偏移（内存中<code>.tbss</code>紧跟在<code>.tdata</code>后）。</p>
+
+<h2 id="tls-4">TLS的运行时分配</h2>
+
+<p>根据上面的介绍，要访问TLS变量需要确定两个信息：</p>
+
+<ol>
+  <li>定义TLS变量的模块（可执行程序exec或动态共享库DSO）；</li>
+  <li>TLS变量在该模块的TLS段的偏移.</li>
+</ol>
+
+<p>这两个信息在链接时是不知道的，需要动态链接器在运行时计算。然后再根据这两个信息查找这个TLS变量在当前线程
+中的地址，这需要借助如下的数据结构来完成。</p>
+
+<p><img src="/images/tls_data_structure.jpg" title="Fig. 1 Thread-Local Storage data structures" ></p>
+
+<p>$tp_t$表示线程$t$的线程寄存器，指向线程控制块TCB，其在0偏移处指向动态线程向量$dtv_t$. DTV第一个元素
+是一个generation counter，用于判断该DTV是否需要更新，下面会进一步解释；其它元素包含了所有
+该线程用到的模块的TLS块的地址，用模块ID作为下标访问。有些模块的TLS块跟TCB放在一起，是程序启动时就分配
+的（如exec及其依赖的DSO），称为<em>静态模型</em>；有些模块是程序运行中动态加载的（通过<code>dlopen()</code>动态加载），
+TLS块在线程第一次访问时分配，称为<em>动态模型</em>。对于静态模型，在程序启动时动态链接器就可以确定其相对于$tp_t$
+的偏移值，编译器生成代码时可以直接使用这些偏移值来访问。对于动态模型，由于TLS时延迟分配的，需要调用运行时
+系统提供的<code>__tls_get_addr()</code>获取其地址。</p>
+
+<h3 id="section">程序启动</h3>
+
+<p>程序启动时，动态链接器搜集所有模块的TLS信息，包括以下字段：</p>
+
+<ul>
+  <li>TLS初始化镜像的地址</li>
+  <li>TLS初始化镜像的大小</li>
+  <li>模块的偏移值$tlsoffset$</li>
+  <li>是否使用静态模型</li>
+</ul>
+
+<p>动态加载一个模块时也会加入这些信息。线程库将利用这些信息为新建的线程分配TLS块和DTV.  对于使用动态模型和动态
+加载的模块，线程库会延迟分配TLS块，直到第一次访问。</p>
+
+<h3 id="tls-5">延迟分配TLS</h3>
+
+<p>对于延迟分配的TLS，由于其偏移值在启动时未知，必须借助于<code>__tls_get_addr()</code>获取，定义类似如下：</p>
+
+<pre><code class="language-C">struct tls_index {
+    size_t module_id;
+    size_t offset;
+};
+
+void* __tls_get_addr(struct tls_index* ti)
+{
+    // Get the DTV of current thread.
+    dtv_t* dtv = GET_CURRENT_DTV();
+
+    // Check if the DTV is stale, and if so, update it.
+    if (dtv[0].counter != dl_tls_generation) {
+        update_dtv();
+    }
+
+    // Get the TLS block. If not allocated yet, allocate now.
+    char* tls_block = dtv[ti-&gt;module_id];
+    if (tls_block == UNALLOCATED_TLS_BLOCK) {
+        tls_block = dtv[ti-&gt;module_id] = allocate_tls(module_id);
+    }
+
+    return tls_block + ti-&gt;offset;
+}
+</code></pre>
+<p><code>module_id</code>是模块ID，由动态链接器在加载模块时分配，从1开始（exec的模块ID固定是1）。</p>
+
+<p>当动态加载或卸载一个模块时，动态链接器维护的<code>dl_tls_generation</code>会加1，表示模块信息有了变化。由于每个线
+程的DTV时延迟更新的，所以每个线程的<code>dtv[0]</code>也会维护自己的<code>generation counter</code>，用于在访问TLS时判断
+是否需要更新DTV.</p>
+
+<h2 id="tls-6">TLS的访问模式</h2>
+
+<p>上面已经提到过TLS的两种访问模式：静态模式和动态模式，这一节针对不同场景细化为4种模式。对于每一种模式，
+都要求动态链接器在程序启动或动态加载模块时立即处理TLS相关的重定位。TLS的重定位是为了确定模块ID和在TLS块
+中的偏移，然后存储在<code>GOT</code>表中。</p>
+
+<p>模块ID和偏移有时候需要运行时才能确定，有时候链接时即可知道，因此组合起来可分为4种访问模式。具体采用哪种模式
+由编译器和链接器共同决定。</p>
+
+<h3 id="general-dynamic">General Dynamic</h3>
+
+<p>支持访问所有的TLS变量，包括exec和DSO定义的TLS；也支持延迟分配TLS.  这种模式下不需要链接时知道模块ID和
+偏移值。程序启动时动态链接器通过重定向确定模块ID和TLS变量的偏移值，存储在<code>GOT</code>表中。在访问TLS时调用
+<code>__tls_get_addr()</code>，传入这两个参数，获取TLS变量的地址。</p>
+
+<h3 id="local-dynamic">Local Dynamic</h3>
+
+<p>如果链接编辑器确定访问的TLS变量属于本模块（如文件作用域的TLS变量），则采用此模型。TLS变量的偏移值在链接时
+即可确定，只需要调用<code>__tls_get_addr()</code>确定TLS块的地址即可。由于TLS块的地址可以在不同的本地TLS变量
+访问时复用，所以相比于GD模型编译器可利用此模型生成有效的代码减少对<code>__tls_get_addr()</code>的调用次数。例如，在同一个函数
+内访问不同的本地TLS变量，只需要调用一次<code>__tls_get_addr()</code>即可。</p>
+
+<h3 id="initial-exec">Initial Exec</h3>
+
+<p>如果可以确定访问的TLS变量在程序启动时就已分配好，则采用此模型。TLS变量相对于线程寄存器的偏移量可在
+程序启动时由动态链接器计算好存放在GOT表中。访问TLS变量相当于一次间接地址访问，不需要调用<code>__tls_get_addr()</code>.</p>
+
+<h3 id="local-exec">Local Exec</h3>
+
+<p>如果可以确定在exec中访问exec定义的TLS变量，则采用此模型。链接时即可知道TLS变量相对于线程寄存器的偏移量，
+计算其地址相当于寄存器加上一个常量，因此访问TLS变量与访问局部变量没有区别。</p>
+
+<h1 id="per-thread-resource-allocation-pattern">Per-thread resource allocation pattern</h1>
+
+<p>线程局部变量可以有效避免锁竞争，根据上面介绍的TLS实现来看，访问成本与普通变量也差不多，但是它完全防止了
+线程之间的通信，很多时候不满足需求。所以需要在避免竞争与线程通信之间取得平衡，一种常用的模式是每个线
+程分配自己的私有资源以满足大部分需求，只有在必要的时候才与其它线程通信。如下的程序实现了并发统计，在
+线程结束后由主线程汇总打印。</p>
+
+<pre><code class="language-C++">#include &lt;iostream&gt;
+#include &lt;thread&gt;
+#include &lt;ctime&gt;
+#include &lt;vector&gt;
+
+size_t kNumThreads = 10;
+
+int main()
+{
+    uint32_t stats[kNumThreads];
+    std::vector&lt;std::thread&gt; threads;
+    for (size_t i = 0; i &lt; kNumThreads; ++i) {
+        threads.push_back(
+                std::thread([&amp;, i] {
+                                time_t start = std::time(nullptr);
+                                do_something();
+                                time_t end = std::time(nullptr);
+                                stats[i] = end-start;
+                            }));
+    }
+    for (auto&amp; t : threads) {
+        t.join();
+    }
+    uint32_t total = 0;
+    for (auto t : stats) {
+        total += t;
+    }
+    std::cout &lt;&lt; "total=" &lt;&lt; total &lt;&lt; std::endl;
+    return 0;
+}
+</code></pre>
+
+<p>主线程分配了一个数组，每个元素对应一个子线程，防止线程竞争。这样也方便了子线程将数据传回给主线程。
+如果采用线程私有变量则比较麻烦，必须借助其它全局变量来通信。所以说为了避免竞争并不一定需要线程私有变量。</p>
+
+<p>Linux内核很多统计即采用了这种模式，每个CPU核维护自己的统计数据，需要报告数据时则遍历所有核的数据合计
+输出。著名的内存分配器tcmalloc也采用了这种模式来避免锁竞争，提高并发效率。它针对小内存的分配和释放做
+了优化，小内存从本线程维护的内存池分配，大内存才从全局的内存池分配。同时为防止资源浪费，会在线程之间进行
+内存资源调度，将本线程长期不用的内存转移给其它线程使用。所以说在大多数情况下避免了资源协调。</p>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>如果线程之间完全不需要通信，推荐采用隐式TLS，使用非常方便，也不用担心资源释放的问题。但是如果要自己
+灵活控制TLS资源的释放，则可以考虑采用显示TLS，推荐使用Boost库，可省不少心。</p>
+
+<p>如果线程之间多少是需要通信的，不建议TLS，建议还是用共享数据结构加锁保护。为了提高性能可考虑使用原子变
+量或者无锁数据结构。最终极的优化方法还是优化多线程的交互结构，尽量减少线程间通信。</p>
+
+<h1 id="references">References</h1>
+
+<ul>
+  <li><a href="https://uclibc.org/docs/tls.pdf">ELF Handling of Thread-Local Storage</a></li>
+  <li><a href="https://docs.oracle.com/cd/E19683-01/817-3677/chapter8-tbl-1/index.html">Linkers and Libraries Guide</a></li>
+  <li><a href="http://david-grs.github.io/tls_performance_overhead_cost_linux/">TLS performance overhead and cost on GNU/Linux</a></li>
+  <li><a href="http://blog.csdn.net/chosen0ne/article/details/9338591">TCMalloc小记</a></li>
+  <li><a href="http://www.boost.org/doc/libs/1_65_1/doc/html/thread/thread_local_storage.html">Boost Thread Local Storage</a></li>
+</ul>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[数据对齐]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/02/03/data-alignment/"/>
+    <updated>2012-02-03T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/02/03/data-alignment</id>
+    <content type="html"><![CDATA[<h2 id="section">为什么要数据对齐？</h2>
+
+<p>所谓数据对齐是指访问数据的地址要满足一定的条件，能被这个数据的长度所整除。例
+如，1字节数据已经是对齐的，2字节的数据的地址要被2整除，4字节的数据地址要
+被4整除。
+<!--more-->
+但为什么要数据对齐呢？简单地说，数据对齐是为了读取数据的效率。假如说每一次读
+取数据时都是一个字节一个字节读取，那就不需要对齐了，这跟读一个字节没有什么区
+别，就是多读几次。但是这样读取数据效率不高。为了提高读取数据的带宽，现代存储
+系统都采用许多并行的存储芯片来提高读取效率。以自然字长为4个字节的机器为例。
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>memory chip     0       1       2       3
+</span><span class='line'>offset&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;0             0       1       2       3
+</span><span class='line'>  1             4       5       6       7
+</span><span class='line'>  2             8       9      10      11
+</span><span class='line'>  N            4N    4N+1    4N+2    4N+3</span></code></pre></td></tr></table></div></figure>
+如上图所示，地址0-3的4字节数据都存储在4个不同的芯片上。CPU的bits 0-7连上芯片
+0，bits 8-15连上芯片1，bits 16-23连上芯片2，bits 24-31连上芯片4。</p>
+
+<p>如果从地址0读取4字节数据，4个存储芯片都从各自的地址0读出数据，而且位置也是正
+确的。这4个字节的读取可以并行地进行，因此带宽是一次读取一个字节的4倍。</p>
+
+<p>假如要从地址1读取4字节数据会发生什么呢？首先，读取的数据位置不正确。从芯片1
+读取的数据应该放在bits 0-7，它却对应CPU的bits 8-15。从芯片2，3，0读取的数据
+也是一样。这并不是什么大问题，CPU可以把读入的数据循环左移8比特来把它们放置在
+正确的位置上。问题在于，这一次发给4个芯片的地址不一样，给芯片1，2和3的地址是
+0，给芯片0的地址是1。也就是说给每一个芯片的地址都不一样，这就需要多根地址总
+线。32位的CPU就需要4个地址总线，每个地址总线需要用到CPU的至少32个引脚，也就
+是必须要100多根引脚。而通常32位的CPU也就400多个引脚。这当然会增加CPU与内存接
+口的复杂性（也可能会有其它的方案解决这个问题，但最终都会使接口变得更复杂，还
+可能会降低效率）。但是增加这个复杂性是不值得。由于大多数数据访问都可以做成对
+齐的（编译器通常会使数据对齐），因此为了使极少数的不对奇访问速度更快而使CPU
+与内存的接口变的更复杂，是不划算的。</p>
+
+<p>在这样的设计下，访问没有对齐的数据需要2次访问。比如，访问地址1, 2, 3, 4的4字
+节数据，先读取地址0-3的数据，再读取地址4-7的数据，再把地址1-5的数据取出来放
+到目的寄存器中。相应地，这增加了CPU内部的复杂性。这就解释了为什么不对齐的数
+据要多次访问内存，速度不如访问对齐的数据快。而且也解释了为什么原子类型的数据
+必须要对齐。有的CPU，例如Motorala生产的一些CPU，还有IBM的PowerPC，为了消除这
+个复杂性，干脆禁止访问不对奇地址（若访问不对奇地址时将产生异常）。</p>
+
+<p>总结一下为什么需要数据对齐。为了增加CPU读取数据的带宽，内存系统通常都采用并
+行结构使得可以并行传输数据。这样的并行结构使得访问对齐的数据速度快，但是若要
+使访问不对奇的数据也一样快会使CPU与内存系统的接口变得更复杂，而这是划不来的。
+经过权衡之后，最终的结果是：访问对齐的数据速度快，访问不对奇的数据速度慢（需
+要2次访问）或干脆禁止访问不对奇数据。</p>
+
+<p>关于访问对齐数据和不对齐数据的速度差异请看<a href="http://www.ibm.com/developerworks/library/pa-dalign/">这里</a>。关于为什么使访问不对
+齐数据需要多次访问请看<a href="http://stackoverflow.com/q/3903164/471846">这里</a>。关于哪些CPU禁止访问不对奇数据以及在这些CPU上如何解
+决访问不对齐数据的问题请看<a href="http://en.wikipedia.org/wiki/Data_structure_alignment">这里</a>.</p>
+
+<h2 id="visual-c">Visual C++的结构体对齐规则</h2>
+
+<p>MSDN对Visual C++的结构体对齐规则有<a href="http://msdn.microsoft.com/zh-cn/library/hx1b6kkd.aspx">简单介绍</a>，现摘录如下：</p>
+
+<blockquote>
+  <p>Structure members are stored sequentially in the order in which they are
+declared: the first member has the lowest memory address and the last
+member the highest.</p>
+
+  <p>Every data object has an alignment-requirement. The alignment-requirement
+for all data except structures, unions, and arrays is either the size of
+the object or the current packing size (specified with either /Zp or the
+pack pragma, whichever is less). For structures, unions, and arrays, the
+alignment-requirement is the largest alignment-requirement of its
+members. Every object is allocated an offset so that</p>
+
+  <pre><code>offset %  alignment-requirement == 0
+</code></pre>
+
+  <p>Adjacent bit fields are packed into the same 1-, 2-, or 4-byte allocation
+unit if the integral types are the same size and if the next bit field
+fits into the current allocation unit without crossing the boundary
+imposed by the common alignment requirements of the bit fields.</p>
+</blockquote>
+
+<p>每一个数据对象都有一个对齐限制，通常称为<strong>对齐模数</strong>。对于基本
+类型（不包括结构体，联合体和数组）不同的数据类型的对齐模数通常等于这个数据类
+型的大小，比如<code>char</code>的对齐模数为1，<code>short</code>的对齐模数为2，<code>int</code>的对齐模数为4，
+<code>float</code>的对齐模数是4，<code>double</code>的对齐模数为8。当然，这个对齐模数每一个编译器
+可能有差异，并且可以设置。在Visual C++中可以通过<tt>/Zp</tt>选项或
+<code>#pragma</code>设置。综合起来，基本类型的对齐模数是这个类型的大小和设置的对齐限制
+的较小者。对于结构体，联合体和数组，对齐模数是它的成员的对齐模数的最大值。</p>
+
+<p>现举几个例子说明一下。（下面例子都在Visual C++ 2008 Express Edition上测试
+过。）
+<code>c
+struct A {
+    char c;
+    int i;
+};
+</code>
+<code>c</code>的对齐模数是1，<code>i</code>的对齐模数是4，因此结构体<code>A</code>的对齐模数为4。<code>c</code>本身占用
+1个字节，由于<code>i</code>的对齐模数为4，因此<code>c</code>后面填充3个字节以使<code>i</code>的起始地址对齐。
+这样加起来是8个字节，<code>A</code>已经对齐了, 后面不用再填充了，因此<code>A</code>占用8个字节。</p>
+
+<p>另一个例子。
+<code>c
+struct A {
+    char c;
+    int i;
+    char d;
+};
+</code>
+跟上面一样，<code>c</code>的对齐模数是1，<code>i</code>的对齐模数是4，
+<code>d</code>的对齐模数是1，因此结构体<code>A</code>的对齐模数为4。
+<code>c</code>占用1字节，为使<code>i</code>对齐，<code>c</code>后面要填充3个
+字节，因此<code>c</code>和<code>i</code>占用8个字节。<code>d</code>占用1个字节，
+这样一共占用9个字节，但是<code>A</code>的对齐模数是4，因此<code>d</code>后面
+要填充4字节。因此<code>A</code>占用12字节。</p>
+
+<p>对于比特域来讲，上面的规则要稍稍修改一下。对于连续的声明类型大小相同的比特域
+来讲，如果它们申请的宽度加起来不超过它们声明的类型大小，那么它们可以压缩在一
+个分配单元中。对于声明类型大小不同的比特与来讲，它们分配在不同的分配单元中。</p>
+
+<pre><code>struct A {
+    char a : 3;
+    char b : 5;
+};
+</code></pre>
+
+<p><code>a</code>和<code>b</code>的类型长度都为1字节，因此可以考虑合并。它们加起来为8比特，
+可以放在一个字节中，由于<code>A</code>的对齐模数为1，因此不需在后面再填充数
+据，所以<code>A</code>的大小为1字节。</p>
+
+<p>另一个例子.</p>
+
+<pre><code>struct A {
+    char a : 4;
+    char b : 5;
+}
+</code></pre>
+
+<p><code>a</code>和<code>b</code>的类型长度都为1字节，因此可以考虑合并，但跟上
+例不同的是，它们无法放入一个字节中（加起来为9比特），因此它们要放在各自的分
+配单元中，<code>a</code>和<code>b</code>之间有4比特的空隙。<code>A</code>的
+大小为2字节。</p>
+
+<p>再考虑如下例子.</p>
+
+<pre><code>struct A {
+    char a : 3;
+    int b : 2;
+    char c : 2;
+};
+</code></pre>
+
+<p><code>a</code>和<code>b</code>的类型长度不相等（<code>a</code>的为1字节，
+<code>b</code>的为4字节），因此不能合并，同样<code>b</code>和<code>c</code>
+也不能合并。因此，<code>a</code>单独占用1字节，后面填充3字节以使
+<code>b</code>对齐，<code>b</code>占用4字节，<code>c</code>占用1字节。由于
+<code>A</code>的对齐模数是4字节，所以<code>c</code>后面要填充3字节，
+<code>A</code>的大小为12字节。</p>
+
+<p>下面再考虑匿名比特域的例子。匿名比特域主要目的是在两个比特域之间加入一段空隙。</p>
+
+<pre><code>struct A {
+    char a : 2;
+    char   : 2;
+    char b : 2;
+};
+</code></pre>
+
+<p>匿名比特域对对齐规则没有影响，它唯一的不同是无法引用这个域。由于这3个域的类
+型大小是一样的，且可以放在一个字节之中，因此可以合并，<code>A</code>的大小为
+1字节。</p>
+
+<p>下面再考虑匿名比特域宽度为0的，它的作用是使它后面的比特域对齐到下个比特域的对齐模数上，也就是说，不允许它跟上一个比特域合并。</p>
+
+<pre><code>struct A {
+    char a : 2;
+    char   : 0;
+    char b : 2;
+};
+</code></pre>
+
+<p>尽管这三个比特域的类型一样，但是由于<code>a</code>和<code>b</code>之间有一个
+宽度为0的匿名比特域，因此 它们不能合并。<code>a</code>和<code>b</code>个占用
+1个字节，所以<code>A</code>的大小为2字节。</p>
+
+<p>最后，对于具有普通成员和比特域的结构体，它们的对齐规则跟上面的一样。注意，普
+通成员与比特域不能合并，只有连续的比特域之间可以考虑合并，每一个成员都要对
+齐到自己的对齐模数上。</p>
+
+<h2 id="section-1">如何实现数据对齐</h2>
+
+<p>通过调用<code>malloc()</code>或者<code>new</code>运算符动态分配的内存已经是对任何类型都对齐了（见<a href="http://stackoverflow.com/questions/8752546/how-does-malloc-understand-alignment/18479609#18479609">这
+里
+</a>
+）。如果自己动手写一个内存分配器也要注意分配对齐的内存。通常编译器会提供工具来帮助对齐，例如，GCC提
+供了<a href="https://gcc.gnu.org/onlinedocs/gcc/Alignment.html"><code>__alignof__()</code></a>来获得数据结构的对齐要求。
+C++11也提供了类似的运算符<a href="http://en.cppreference.com/w/cpp/language/alignof"><code>alignof</code></a>。</p>
+
+<p>在静态存储区或者栈上定义的对象由编译器分配内存并保证对齐要求。如果是用户自己在静态存储区或者栈上分配
+内存可以使用编译器或者编程语言提供的工具实现对齐，如GCC提供
+<a href="https://gcc.gnu.org/onlinedocs/gcc/Common-Variable-Attributes.html#Common-Variable-Attributes"><code>aligned</code></a>
+属性实现对齐：</p>
+
+<pre><code>int a __attribute ((aligned(__alignof(std::string)));
+</code></pre>
+
+<p>表示<code>a</code>的对齐要求与<code>std::string</code>一样。C++11提供了运算符
+<a href="http://en.cppreference.com/w/cpp/language/alignas"><code>alignas</code></a>，上述的例子改写如下：</p>
+
+<pre><code>alignas(alignof(std::string)) int a;
+</code></pre>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[查看进程的内存使用情况]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/02/02/check-process-memory/"/>
+    <updated>2012-02-02T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/02/02/check-process-memory</id>
+    <content type="html"><![CDATA[<h2 id="ps">用ps命令查看进程的内存</h2>
+
+<p><code>ps</code>命令是Linux下常见的查看进程状况的程序，它有几个字段可以用来查看进程内存使用情况：sz，rss，vsz。分别说明如下：</p>
+
+<ul>
+  <li>sz：进程映像所占用的物理页面数量，也就是以物理页面为单位表示的虚拟内存大小；</li>
+  <li>rss：进程当前所占用的物理内存大小，单位为kB；</li>
+  <li>vsz：进程的虚拟内存大小，单位为kB，它等于sz乘于物理页面大小（x86平台通常为4kB）。
+<!--more--></li>
+</ul>
+
+<p>假如我要查看程序<code>a.out</code>的内存使用情况，操作如下：
+<code>
+$ ./a.out &amp;
+[1] 10069
+$ ps -O sz,rsz,vsz
+PID    SZ   RSS    VSZ S TTY          TIME COMMAND
+ 6793  1545  3648   6180 S pts/2    00:00:00 /bin/bash
+10069   404   304   1616 S pts/2    00:00:00 ./a.out
+10070   626   876   2504 R pts/2    00:00:00 ps -O sz,rss,vsz
+</code>
+上面<code>ps</code>命令的输出的第3行就是<code>./a.out</code>自行后的相关情况。我们可以看出，它的虚拟
+内存大小为1616kB，当前占用的物理内存为304kB（其它数据在磁盘上或交换分区），
+虚拟内存占用404个物理页面。由于我的机器的物理页面大小为4kB，可以验证404 x
+4kB等于1616kB。</p>
+
+<h2 id="proc">用/proc文件系统查看进程的内存使用情况</h2>
+
+<p><code>ps</code>命令的输出关于内存的情况不是很详细，尤其是进程所使用的内存中有很大一部分
+是共享库函数使用的，因此通过<code>ps</code>命令的输出看不到进程自己使用了多少内
+存。为了查看更详细的信息，可以借助于<code>/proc</code>文件系统。这个文件系统并存
+在于磁盘上，但是可以象操作其它普通文件一样操作它。它是Linux提供给用户查看进
+程相关信息的接口。在<code>/proc</code>下有2个文件和进程内存有关：
+<code>/proc/&lt;pid&gt;/status</code>和<code>/proc/&lt;pid&gt;/smaps</code>。</p>
+
+<p>通过<code>/proc/&lt;pid&gt;/status</code>可以查看进程的内存使用情况，包括虚拟内存大小
+（VmSize），物理内存大小（VmRSS），数据段大小（VmData），栈的大小（VmStk），
+代码段的大小（VmExe），共享库的代码段大小（VmLib）等等。
+<code>
+$ cat /proc/10069/status
+Name:   a.out
+State:  S (sleeping)
+Tgid:   10069
+Pid:    10069
+PPid:   6793
+TracerPid:      0
+Uid:    1001    1001    1001    1001
+Gid:    1001    1001    1001    1001
+FDSize: 256
+Groups: 1000 1001 
+VmPeak:     1692 kB
+VmSize:     1616 kB
+VmLck:         0 kB
+VmHWM:       304 kB
+VmRSS:       304 kB
+VmData:       28 kB
+VmStk:        88 kB
+VmExe:         4 kB
+VmLib:      1464 kB
+VmPTE:        20 kB
+Threads:        1
+SigQ:   0/16382
+SigPnd: 0000000000000000
+ShdPnd: 0000000000000000
+SigBlk: 0000000000000000
+SigIgn: 0000000000000000
+SigCgt: 0000000000000000
+CapInh: 0000000000000000
+CapPrm: 0000000000000000
+CapEff: 0000000000000000
+CapBnd: ffffffffffffffff
+Cpus_allowed:   f
+Cpus_allowed_list:      0-3
+Mems_allowed:   1
+Mems_allowed_list:      0
+voluntary_ctxt_switches:        1
+nonvoluntary_ctxt_switches:     1
+</code>
+注意，VmData，VmStk，VmExe和VmLib之和并不等于VmSize。这是因为共享库函数的数
+据段没有计算进去（VmData仅包含a.out程序的数据段，不包括共享库函数的数据段，
+也不包括通过mmap映射的区域。VmLib仅包括共享库的代码段，不包括共享库的数据
+段）。</p>
+
+<p>通过<code>/proc/&lt;pid&gt;/smaps</code>可以查看进程整个虚拟地址空间的映射情况，它的输
+出从低地址到高地址按顺序输出每一个映射区域的相关信息，如下所示：
+<code>
+$ cat /proc/10069/smaps
+00110000-00263000 r-xp 00000000 08:07 128311     /lib/tls/i686/cmov/libc-2.11.1.so
+Size:               1356 kB
+Rss:                 148 kB
+Pss:                   8 kB
+Shared_Clean:        148 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:          148 kB
+Swap:                  0 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+......
+......
+bfd7f000-bfd94000 rw-p 00000000 00:00 0          [stack]
+Size:                 88 kB
+Rss:                   8 kB
+Pss:                   8 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         8 kB
+Referenced:            8 kB
+Swap:                  0 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+</code>
+注意：<code>rwxp</code>中，<code>p</code>表示私有映射（采用Copy-On-Write技术）。<code>Size</code>字段就是该区域的大小。</p>
+
+<h2 id="section">参考文献</h2>
+
+<ul>
+  <li><code>ps(1)</code>的<code>-O</code>选项。</li>
+  <li><code>proc(5)</code>的<code>/proc/[pid]/status</code>和<code>/proc/[pid]/smaps</code>条目。</li>
+</ul>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Symbol Resolution by GNU Ld]]></title>
+    <link href="http://spockwangs.github.io/blog/2011/08/20/symbol-resolution-by-gnu-ld/"/>
+    <updated>2011-08-20T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2011/08/20/symbol-resolution-by-gnu-ld</id>
+    <content type="html"><![CDATA[<h2 id="symbol-resolution">Symbol Resolution</h2>
+
+<p>When a symbol appeared multiple times in object files being combined
+asymbole resolution process is called by the link editor to determine
+whichsymbol is taken. The resolution of two symbols with the same
+namedepends on the symbol’s attributes (its binding, defineness and
+size). See page 67 of [<a href="#gabi41">Gabi4</a>].
+<!--more--></p>
+
+<ul>
+  <li><strong>Global:</strong> Global symbols are those whose binding is
+<code>STB_GLOBAL</code>. They are visible to all object files being
+combined.</li>
+  <li><strong>Weak:</strong> Weak symbols are binding is <code>STB_WEAK</code>. They resemble
+global symbols, but their definitions have lower precedence. It can be
+further categorized into two kinds: undefined weak symbols and defined weak
+symbols.</li>
+  <li><strong>Common:</strong> Common symbols are those whose section index is
+<code>STN_COMMON</code>. They are defined but have not been allocated. Its
+final size are not determined until the symbol resolution process is
+complete.</li>
+  <li><strong>Undefined:</strong> Undefined symbols are those whose section index is
+<code>STN_UNDEF</code>.</li>
+</ul>
+
+<p>The rules for symbol resolution is as follows.</p>
+
+<ol>
+  <li>
+    <p>If a global symbol exists it can only appeared once in object files
+being combined. Multipe definitions of global symbols with the same name
+will cause an error. On the other hand, if a definition of a global symbol
+eixists, the appearence of weak symbols and/or common symbols with the same
+name will not cause an error. The link editor honors the global definition
+and ignores the weak and/or common ones.</p>
+  </li>
+  <li>
+    <p>Otherwise, if a common symbol exists, the appearence of weak symbols
+with the same name will not cause an error. The link editor honors the
+common definition and ignores the weak ones. If muliple common symbols with
+the same name exists, the link editor honors the common definition with the
+biggest size.</p>
+  </li>
+  <li>
+    <p>Otherwise, multiple appearences of weak symbols with the same name do not cause an error.</p>
+    <ol>
+      <li>If some of the weak symbols are defined (the section index is a
+positive integer), the link editor will honor the first found defined
+symbol and inogre the others.</li>
+      <li>Otherwise, if all the weak symbols are undefined, the symbol will
+be left as an undefined weak symbol in the output file no matter what
+type of output file is being generated. In addition, if a executable is
+being generated, all the reference to the symbol will be assigned a
+value of zero. In the case of dynamic shared object, during process
+execution, the dynamic linker searches for this symbol. If the dynamic
+linker does not find a match, it binds a reference to a address of zero
+instead of generating a fatal runtime relocation error.</li>
+    </ol>
+  </li>
+</ol>
+
+<h2 id="testing-existence-of-functionality">Testing Existence of Functionality</h2>
+
+<p>Undefined weak refenrenced symbols may provide a useful mechanism
+fortesting the existence of functionality. For example, the following C
+codefragment might have been used in the shared object<code>libfoo.so.1</code>:</p>
+
+<pre><code>#pragma weak foo
+
+extern void foo(char *);
+
+void bar(char *path)
+{
+    void (*fptr)(char *);
+    if ((fptr = foo) != 0)
+        (*fptr)(path);
+}
+</code></pre>
+
+<p>When application is built against <code>libfoo.so.1</code>, the link editor
+willcomplete successfully regardless of whether a definition for the
+symbol<code>foo</code> is found. If during execution of the application the
+functionaddress tests nonzero, the function is called. However, if the
+symboldeﬁnition is not found, the function address tests zero and so it is
+notcalled. See page 45 of [<a href="symbols.html#sun04">Sun04</a>].</p>
+
+<h2 id="refenrences">Refenrences</h2>
+
+<ul>
+  <li>[gabi4] <a href="http://www.sco.com/developers/devspecs/gabi41.pdf">System V ABI Edition 4.1, 1997</a></li>
+  <li>[sun04] Sun Microsystems, Inc., <a href="http://download.oracle.com/docs/cd/E19683-01/817-3677/817-3677.pdf"><em>Linker and Libraries Guide</em></a>, 2004.</li>
+</ul>
+]]></content>
+  </entry>
+  
+</feed>

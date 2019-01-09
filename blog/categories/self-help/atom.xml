@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Self-help | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/self-help/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[2013年学到了什么]]></title>
+    <link href="http://spockwangs.github.io/blog/2013/12/24/what-i-learned-in-2013/"/>
+    <updated>2013-12-24T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2013/12/24/what-i-learned-in-2013</id>
+    <content type="html"><![CDATA[<ol>
+  <li>不要思考现有技术能做什么，而要思考你真正需要什么，然后再想办法用现有技术
+做出来。即使现有技术做不出来也不要紧，可以做一个接近目标的。不要让现有技术束
+缚了你的思维。
+<!--more--></li>
+  <li>
+    <p>一个模式只有在至少3个不同地方遇到后才能搞明白它到底是什么，然后将其抽象
+出来复用。</p>
+  </li>
+  <li>
+    <p>答应去做的事情一定要全身心投入去做，否则就不要答应。免得别人不满意，自己
+也不高兴，浪费大家的时间。</p>
+  </li>
+  <li>
+    <p>控制情绪的最好方法就是只讲事实不讲自己的猜测，而这恰恰极难做到。</p>
+  </li>
+  <li>
+    <p>开发软件有两种方法：一个是容易的，一个是简单的。容易的方法一开始看起来效
+率很高，但是随着时间推移软件的复杂性与日俱增以致不可控，开发效率逐渐降低。
+简单的方法一开始效率很低，几乎毫无进展，但是一旦取得突破定好架构开发效率将与
+日俱增，复杂性得到驯服。见<a href="http://www.infoq.com/presentations/Simple-Made-Easy">Simple Made
+Easy</a>.</p>
+  </li>
+  <li>一旦找到合适的计算模型任何编程难题都迎刃而解。 “Point of view is worth
+80 IQ points.” – Alan Kay</li>
+</ol>
+]]></content>
+  </entry>
+  
+</feed>

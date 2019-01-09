@@ -1,0 +1,422 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>C++的new和delete运算符与内存分配函数和释放函数 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="我曾经碰到下面一段代码：
+1
+int *p = new (sizeof(int)); 编译通不过，提示说是new运算符语法错误。但若换成如下：
+1
+int *p = operator new (sizeof(int)); 编译顺利通过。一时不得其解。前一句代码显然是调用new运算符； &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/02/03/cpp-new-and-delete/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">C++的new和delete运算符与内存分配函数和释放函数</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>我曾经碰到下面一段代码：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="kt">int</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="n">new</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>编译通不过，提示说是<code>new</code>运算符语法错误。但若换成如下：</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class="c"><span class="line"><span class="kt">int</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="n">operator</span> <span class="n">new</span> <span class="p">(</span><span class="k">sizeof</span><span class="p">(</span><span class="kt">int</span><span class="p">));</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>编译顺利通过。一时不得其解。前一句代码显然是调用new运算符；后一句看起来也像
+是调用<code>new</code>运算符，毕竟其它运算符可以这样调用。
+<!--more--></p>
+
+<p>在仔细查看了C++标准后，我才发现这两句代码实际上是不一样的。前一句是调用<code>new</code>运
+算符，但后一句是直接调用内存分配函数。本文就是要澄清这两者之间的区别。</p>
+
+<p><code>new</code>运算符有两步操作：</p>
+
+<ol>
+  <li>调用适当的内存分配函数分配内存<code>opeator new</code>或<code>operator new[]</code>;</li>
+  <li>调用适当的构造函数。</li>
+</ol>
+
+<p>同样地，<code>delete</code>运算符也有两步操作：</p>
+
+<ol>
+  <li>调用适当的析构函数；</li>
+  <li>调用适当的内存释放函数<code>operator delete</code>或<code>operator delete[]</code>.</li>
+</ol>
+
+<p>C++标准库在头文件<code>&lt;new&gt;</code>中提供了一些默认的内存分配函数和释放函数，包括会抛出
+异常的和不抛出异常的版本（见[ISO C++ 1998]的18.4）。严格地来讲，<code>new</code>和
+<code>delete</code>运算符是不能被重载的，重载的只是内存分配函数和释放函数。因此，用户可
+以自定义内存分配函数和释放函数。注意，内存分配函数和释放函数必须是全局函数
+（非静态的）或类的成员函数（3.7.3.1, [ISO C++ 1998])。</p>
+
+<h2 id="section">内存分配释放函数</h2>
+
+<p>内存分配函数的返回值类型为<code>void *</code>，第一个参数的类型为<code>size_t</code>，可以有多个参
+数。内存分配函数分通常(usual)形式和放置(placement)形式。只有一个参数的分配函
+数为通常形式，有多个参数的为放置形式。</p>
+
+<p>内存释放函数的返回值类型为<code>void</code>，第一个参数的类型为<code>void *</code>，可以有多个参数。
+内存释放函数也分通常形式和放置形式。对于全局的内存释放函数，只有一个参数的内
+存释放函数为通常形式，有多个参数的为放置形式。对于类的成员内存释放函数，若声
+明了一个单参数的内存释放函数，则它是通常形式，其它的都为放置形式；若没有声明
+这样一个函数，但是声明了一个两个参数的内存释放函数且第二个参数类型为
+<code>size_t</code>，则它可以作为通常形式的替代品，但它仍是放置形式。(clause 2 of
+3.7.3.2, [ISO C++ 1998])</p>
+
+<p>C++标准库提供了8个内存分配和释放函数，我们也可以用同样的函数签名定义这些函数以替代它们。(clause 2 of 17.4.3.4, [ISO C++ 1998])</p>
+
+<h2 id="newdelete">new和delete运算符及对应的内存分配和释放函数</h2>
+
+<p>对于每一个<code>new</code>运算符，编译器都要找到并调用相应的内存分配函数。若<code>new</code>前面有
+全局作用域解析符或要分配的类型不是类类型，则仅在全局作用域查找内存分配函数；
+否则，先在要分配的类型的类作用域里查找，若找不到再在全局作用域里查找。
+(clause 9 of 5.3.4, [ISO C++ 1998])</p>
+
+<p>非放置形式的<code>new</code>表达式调用通常形式的内存分配函数，放置形式的<code>new</code>表达式调用
+放置形式的内存分配函数。对于非放置形式的<code>new</code>表达式，调用的内存分配函数的第
+一个参数是要分配内存的大小。若是放置形式(placement forms)的<code>new</code>表达式，
+<code>new</code>运算符的放置部分将作为内存分配函数的第二个及后续参数。</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="n">T</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="k">new</span> <span class="n">T</span><span class="p">;</span>        <span class="c1">// call operator new(sizeof(T)) or T::operator new(sizeof(T))</span>
+</span><span class="line"><span class="n">T</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="k">new</span> <span class="n">T</span><span class="p">[</span><span class="mi">5</span><span class="p">];</span>     <span class="c1">// call operator new[](sizeof(T)+delta) or T::operator new[](sizeof(T)+delta)</span>
+</span><span class="line"><span class="n">T</span> <span class="o">*</span><span class="n">p</span> <span class="o">=</span> <span class="k">new</span> <span class="p">(</span><span class="mi">2</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span> <span class="n">T</span><span class="p">;</span> <span class="c1">// call operator new(sizeof(T), 2, f) or T::operator new(sizeof(T), 2, f)</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>对于每一个<code>delete</code>表达式，编译器都要找到并调用相应的内存释放函数。若
+<code>delete</code>前面有全局作用域解析符(<code>::</code>)或要释放的类型不是类类型，则仅在全局作用
+域查找内存释放函数；否则，先在要释放的类型（注意是其动态类型，而不是静态类型）
+的类作用域里查找，若找不到再在全局作用域里查找。(clause 9 of 5.3.4, [ISO
+C++ 1998])</p>
+
+<p>非放置形式的<code>delete</code>表达式调用非放置形式的内存释放函数。<code>delete</code>表达式没有放
+置形式。<code>delete</code>运算符调用的内存释放函数传给内存释放函数的第一个参数是将要释
+放的内存指针。若调用的内存释放函数是类的成员函数且是两参数风格（有两个参数，
+第一个参数是<code>void *</code>，第二个参数类型是<code>size_t</code>，没有声明单参数的内存释放函数，
+所以这个函数是通常形式），则内存的大小作为第二个参数(clause 5 of 12.5, [ISO
+C++ 1998])。</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="c1">// call operator delete(p) or T::operator delete(p) or </span>
+</span><span class="line"><span class="c1">// T::operator delete(p, sizeof(*p))</span>
+</span><span class="line"><span class="k">delete</span> <span class="n">p</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line"><span class="c1">// call operator delete[](p) or T::operator delete[](p) or</span>
+</span><span class="line"><span class="c1">// T::operator delete[](p, sizeof(*p)*s+delta)</span>
+</span><span class="line"><span class="k">delete</span><span class="p">[]</span> <span class="n">p</span><span class="p">;</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>若释放的对象不是数组，则<code>delete</code>的操作数的动态类型与静态类型要么一致，要么其
+析构函数是虚拟的；若释放的对象是数组，则<code>delete[]</code>操作数的动态类型与静态类型必
+须一致。（clause 3 of 5.3.5, [ISO C++ 1998])</p>
+
+<p>内存释放函数虽然是静态的，不能动态绑定，但是若类T的析构函数是虚拟的则编译器
+将根据指针<code>T *p</code>的动态类型来决定调用合适的内存释放函数(clause 7 of 12.5, [ISO
+C++ 1998])。例如：</p>
+
+<pre><code>struct B {
+    virtual ~B();
+    void operator delete(void *);
+};
+struct D : B {
+    void operator delete(void *);
+};
+void f()
+{
+    B *bp = new D;
+    delete bp;         // use D::operator delete(void *), not B::operator delete(void *)
+}
+</code></pre>
+
+<p>若<code>new</code>运算符在初始化对象时抛出异常并且存在与<code>operator new</code>匹配的内存释放函
+数，那么这个内存释放函数将被调用以释放内存，异常在<code>new</code>表达式的环境下继续传
+播。非放置形式的内存释放函数与非放置形式的内存分配函数是匹配的；放置形式的内
+存释放函数与放置形式的内存分配函数，若它们的第二个及后续参数一致，则是匹配的。
+在调用内存释放函数时，内存分配函数的返回值传给内存释放函数的第一个参数；若调
+用的是放置形式的内存释放函数，则将调用放置形式的内存分配函数时传递的额外参数
+传递给内存释放函数。</p>
+
+<pre><code>class A {
+public:
+    A()
+    {
+        throw runtime_error("error");
+    }
+
+    // 放置形式的内存释放函数，也可作为通常形式的替代品，因为单参数的内存释放函数不存在。
+    void operator delete(void *p, size_t s) 
+    {
+        cout &lt;&lt; "A::operator delete/n";
+    }
+};
+
+int main()
+{
+    try {
+        A *p = new A;         // 抛出异常！调用A::operator delete()
+    } catch (const exception&amp; e) {
+        cout &lt;&lt; e.what() &lt;&lt; endl;
+    }
+    return 0;
+}
+</code></pre>
+
+<p>由于A的构造函数会抛出异常，而且A定义了一个与<code>operator new(size_t)</code>匹配的内存释放函数，因此编译器将调用那个内存释放函数然后抛出异常。</p>
+
+<h2 id="references">References</h2>
+<ul>
+  <li>[ISO C++ 1998] ISO C++ Standard, 1998.</li>
+</ul>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/programming-language/'>programming language</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/02/02/genenerate-executable-library/" title="Previous Post: 生成可执行的共享库">&laquo; 生成可执行的共享库</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/02/03/data-alignment/" title="Next Post: 数据对齐">数据对齐 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

@@ -1,0 +1,346 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>关于Mysql客户端、连接和服务器字符集 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Introduction Mysql在客户端与服务器交互时涉及到几个字符集和collation的转换问题： 客户端发给服务器的查询语句的字符集是什么？ 客户端发给服务器的语句的字符集由系统变量character_set_client定义。 服务器收到查询语句后会转换成什么字符集？ &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2013/03/14/mysql-character-set/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">关于Mysql客户端、连接和服务器字符集</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-03-14T00:00:00+08:00'><span class='date'>2013-03-14</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="introduction">Introduction</h2>
+
+<p>Mysql在客户端与服务器交互时涉及到几个字符集和collation的转换问题：</p>
+
+<ul>
+  <li>
+    <p>客户端发给服务器的查询语句的字符集是什么？</p>
+
+    <p>客户端发给服务器的语句的字符集由系统变量<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_client">character_set_client</a>定义。
+<!--more--></p>
+  </li>
+  <li>
+    <p>服务器收到查询语句后会转换成什么字符集？</p>
+
+    <p>服务器将收到的查询语句从<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_client">character_set_client</a>转换为
+<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_connection">character_set_connection</a>，除非字符串常量显式指定了字符集。系统变量
+<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_collation_connection">collation_connection</a>定义了字符串常量的collation.</p>
+  </li>
+  <li>
+    <p>服务器返回给客户端的数据的字符集 是什么？</p>
+
+    <p>服务器返回给客户端的数据字符集由系统变量[character_set_results][character_set_results]定义。</p>
+  </li>
+  <li>
+    <p>服务器采用什么字符集存储数据？</p>
+
+    <p>Mysql中<a href="http://dev.mysql.com/doc/refman/5.5/en/string-types.html">字符串类型</a>有两种。对于非二进制字符串类型（<code>char</code>,
+<code>varchar</code>和<code>text</code>）采用建表时指定的字符集存储，对于二进制类型的数据（<code>binary</code>, <code>varbinary</code>, <code>blob</code>, <code>tinyblob</code>,
+<code>mediumblob</code>等类型的数据）采用<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_connection">character_set_connection</a>定义的字符集所映射的二进制值存储，注
+意这些类型本身是没有字符集的。</p>
+  </li>
+</ul>
+
+<p>上面这些系统变量均是<a href="http://dev.mysql.com/doc/refman/5.0/en/using-system-variables.html">会话变量</a>，改变它们的值不会影响其它客户端与服务器的连接。</p>
+
+<h2 id="section">如何设置字符集</h2>
+
+<p>我们通常用<code>set names</code>语句设置连接相关的字符集。</p>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">mysql&gt; set names 'charset_name' [collate 'collation_name']</span></code></pre></td></tr></table></div></figure>
+<p>等价于</p>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">mysql&gt; set character_set_client = 'charset_name'
+</span><span class="line">mysql&gt; set character_set_results = 'charset_name'
+</span><span class="line">mysql&gt; set character_set_connection = 'charset_name'</span></code></pre></td></tr></table></div></figure>
+<p>## 如何查看设置的字符集</p>
+
+<p>可以这样查看设置的系统变量</p>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">mysql&gt; show variables like 'character_set%';
+</span><span class="line">+--------------------------+---------------------------------------+
+</span><span class="line">| Variable_name            | Value                                 |
+</span><span class="line">+--------------------------+---------------------------------------+
+</span><span class="line">| character_set_client     | latin1                                | 
+</span><span class="line">| character_set_connection | latin1                                | 
+</span><span class="line">| character_set_database   | latin1                                | 
+</span><span class="line">| character_set_filesystem | binary                                | 
+</span><span class="line">| character_set_results    | latin1                                | 
+</span><span class="line">| character_set_server     | latin1                                | 
+</span><span class="line">| character_set_system     | utf8                                  | 
+</span><span class="line">| character_sets_dir       | /data/mysql_root/base/share/charsets/ | 
+</span><span class="line">+--------------------------+---------------------------------------+
+</span><span class="line">8 rows in set (0.00 sec)</span></code></pre></td></tr></table></div></figure>
+<p>## References</p>
+
+<ul>
+  <li><a href="http://dev.mysql.com/doc/refman/5.5/en/charset-connection.html">关于连接字符集</a>.</li>
+  <li><a href="http://dev.mysql.com/doc/refman/5.0/en/using-system-variables.html">关于Mysql的两种系统变量</a>.</li>
+</ul>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-03-14T00:00:00+08:00'><span class='date'>2013-03-14</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/database/'>database</a>, <a class='category' href='/blog/categories/mysql/'>mysql</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/03/13/css-best-practice/" title="Previous Post: CSS Best Practice">&laquo; CSS Best Practice</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/03/30/object-oriented-analysis-and-design/" title="Next Post: 使用Booch方法进行面向对象分析与设计">使用Booch方法进行面向对象分析与设计 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

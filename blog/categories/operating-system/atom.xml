@@ -1,0 +1,738 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Operating System | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/operating-system/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[UNIX信号]]></title>
+    <link href="http://spockwangs.github.io/blog/2017/12/02/unix-signals/"/>
+    <updated>2017-12-02T20:27:41+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2017/12/02/unix-signals</id>
+    <content type="html"><![CDATA[<h1 id="introduction">Introduction</h1>
+
+<p>UNIX信号在编程中用的不多，但是对于长时间运行的程序还是很有用的，比如通知程序重新加载配置文件、提早退
+出打印一些信息、监控子进程是否还活着。</p>
+
+<p>本文将澄清UNIX信号的概念，使用信号的注意事项及常用的编程模式。
+<!--more--></p>
+
+<h1 id="unix">UNIX信号的概念</h1>
+
+<p>当触发信号产生的事件发生时（如硬件异常、定时器过期、终端命令或者调用<code>kill()</code>发送信号），信号将发送给
+相关进程或线程。当产生信号时将决定该信号时发送给进程或进程中的某个线程。如果信号的产生原因与线程有关
+（如该线程产生了内存访问异常），则发送给该线程；否则，发送给该进程（例如，终端活动）。</p>
+
+<p>信号产生后，如果没有被阻塞，则投递（deliver）给相关进程或线程执行对应的动作，或者被接受（accept，调用<code>sigwait()</code>系列函数）。</p>
+
+<p>在线程产生到投递之间，信号处于未决状态（pending）。信号在投递前也可以被阻塞。发送给线程的信号，如果被
+阻塞，且该信号的相关动作不是忽略，则该信号将一直处于未决状态，直到：1）解除阻塞；2）被接受；3）其相关
+动作设置为忽略。发送给进程的信号，将发送给愿意接受该信号或没有阻塞该信号的线程处理；如果没有这样的线程
+则一直处于阻塞状态，直到被某个线程：1）解除阻塞；2）接受；3）设置为忽略该信号。如果发送给进程的信号被
+阻塞且其相关动作是忽略时，该信号是否直接丢弃还是处于未决状态是不确定的。</p>
+
+<p>POSIX标准并没有要求信号可以排队，所以一个未决信号重复产生时可能只会投递或接受一次。另外，多个未决信号
+在投递或接受时的顺序也是不确定的。</p>
+
+<p>每个信号都有一个与之关联的动作，如下3种：</p>
+
+<ul>
+  <li>默认
+    <ul>
+      <li>默认动作由系统在程序启动时设置好。注意：有些信号的默认动作是调用<code>_exit()</code>终止程序。</li>
+    </ul>
+  </li>
+  <li>忽略
+    <ul>
+      <li>注意：<code>SIGKILL</code>和<code>SIGSTOP</code>是不能设置为忽略的。</li>
+    </ul>
+  </li>
+  <li>用户自定义函数
+    <ul>
+      <li>用户可设置自定义函数捕获一个信号，但是<code>SIGKILL</code>和<code>SIGSTOP</code>是无法捕获的。另外，<code>SIGSEGV</code>，<code>SIGILL</code>，
+<code>SIGBUS</code>和<code>SIGFPE</code>的捕获函数必须终止程序而不能正常返回。</li>
+      <li>捕获函数的实现必须保证信号安全。</li>
+    </ul>
+  </li>
+</ul>
+
+<h1 id="section">信号安全</h1>
+
+<p>POSIX要求信号的捕获函数必须满足以下要求：</p>
+
+<ul>
+  <li>只能访问<code>errno</code>、<code>volatile sig_atomic_t</code>类型的全局变量或者原子类型的全局变量。</li>
+  <li>只能调用规定的信号安全函数。</li>
+  <li>注意保存和恢复<code>errno</code>.</li>
+</ul>
+
+<p>所以说信号的捕获函数很难实现复杂的逻辑，甚至打印消息也不行（<code>printf()</code>不是信号安全的）。只能通过
+原子变量传递一些简单的信息，线程条件变量和锁都不能用（使用线程锁可能导致死锁）。</p>
+
+<h1 id="section-1">如何注册信号处理函数</h1>
+
+<p>系统提供了两个API注册信号处理函数，简单的版本定义如下：</p>
+
+<p>``` c
+typedef void (*sig_t) (int);</p>
+
+<p>sig_t signal(int sig, sig_t func);
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>注册一个函数，并返回之前注册的函数。当信号投递后信号处理函数执行期间，该信号将被阻塞直到执行完毕，
+</span><span class='line'>防止信号重入。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;复杂的版本定义如下，可设置信号处理有关的更多属性。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;``` c
+</span><span class='line'>struct sigaction {
+</span><span class='line'>    union __sigaction_u __sigaction_u;  /* signal handler &lt;em&gt;/
+</span><span class='line'>    sigset_t sa_mask;               /&lt;/em&gt; signal mask to apply &lt;em&gt;/
+</span><span class='line'>    int     sa_flags;               /&lt;/em&gt; see signal options below */
+</span><span class='line'>};&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;union __sigaction_u {
+</span><span class='line'>     void (&lt;em&gt;__sa_handler)(int);
+</span><span class='line'>     void (&lt;/em&gt;__sa_sigaction)(int, siginfo_t *, void *);
+</span><span class='line'>};&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h1 id="define-sahandler------sigactionusahandler"&gt;define sa_handler      __sigaction_u.__sa_handler&lt;/h1&gt;
+</span><span class='line'>&lt;p&gt;#define sa_sigaction    __sigaction_u.__sa_sigaction&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;int sigaction(int sig, const struct sigaction *restrict act, struct sigaction *restrict oact);</span></code></pre></td></tr></table></div></figure>
+这个API相比于上面的简单版本可以设置信号处理函数执行期间是否阻塞其它信号，或者当信号中断一个慢速的IO
+时是否自动重新执行IO，细节可参考<code>sigaction(2)</code>.</p>
+
+<h1 id="section-2">信号处理的编程模式</h1>
+
+<p>信号处理函数的要求非常严格，除了设置原子变量外也做不了其它事情，下面举一个简单的例子用终端产生信号让
+程序提前结束。</p>
+
+<p>``` c++
+#include <unistd.h>
+#include <signal.h>
+#include <thread></thread></signal.h></unistd.h></p>
+
+<p>volatile sig_atomic_t g_quit = 0;</p>
+
+<p>void stop(int)
+{
+    g_quit = 1;
+}</p>
+
+<p>int main()
+{
+    signal(SIGINT, stop);
+    std::thread(<a href=""></a> {
+                    while (!g_quit) {
+                        sleep(1);
+                    }
+                }).join();
+    return 0;
+}
+```
+通知线程退出的前提是该线程周期性检测是否需要退出。但是在比较复杂的场景下，周期检测并不可取，
+需要采取更复杂的通信机制来通知线程退出，比如条件变量，但是信号处理函数是不能操作条件变量的，
+怎么通知呢？</p>
+
+<p>回忆一下，信号除了投递调用信号处理函数外还可以被线程主动接受，这样我们可以实现任意复杂的逻辑。
+创建一个线程专门接受信号，而其它所有线程都阻塞这些信号，由这个专用线程来实现通知逻辑。</p>
+
+<p>```c++
+#include <thread>
+#include <signal.h>
+#include <mutex>
+#include <condition_variable></condition_variable></mutex></signal.h></thread></p>
+
+<p>int main()
+{
+    // Block SIGINT for all threads.  The subsequently created threads
+    // will inherit this mask.
+    sigset_t set;
+    sigemptyset(&amp;set);
+    sigaddset(&amp;set, SIGINT);
+    pthread_sigmask(SIG_BLOCK, &amp;set, NULL);</p>
+
+<pre><code>std::condition_variable cv;
+
+// Start a thread dedicated to process signals.
+std::thread([&amp;] {
+                int sig;
+                sigwait(&amp;set, &amp;sig);
+                if (sig == SIGINT) {
+                    cv.notify_one();
+                }
+            }).detach();
+
+// The worker thread.
+std::thread([&amp;] {
+                std::mutex mutex;
+                std::unique_lock&lt;std::mutex&gt; lock(mutex);
+                cv.wait(lock);
+            }).join();
+return 0; } ```
+</code></pre>
+
+<h1 id="conclusion">Conclusion</h1>
+
+<p>在处理信号时，如果只需要周期性检查信号是否已经发生，则可注册一个信号处理函数即可搞定。但是如果需要
+处理复杂逻辑，则最好创建一个专用线程来同步处理信号。</p>
+
+<h1 id="references">References</h1>
+
+<ul>
+  <li><a href="http://pubs.opengroup.org/onlinepubs/9699919799/">POSIX Spec</a>, System Interfaces, Singal Concepts</li>
+</ul>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[GNU Tool Chain]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/05/14/gnu-tool-chain/"/>
+    <updated>2012-05-14T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/05/14/gnu-tool-chain</id>
+    <content type="html"><![CDATA[<h2 id="create-static-libraries">Create Static Libraries</h2>
+
+<p>To compile source files</p>
+
+<pre><code>$ gcc -c file1.c file2.c ...
+</code></pre>
+
+<p>To create archives</p>
+
+<pre><code>$ ar r lib&lt;sth&gt;.a file1.o file2.o ...
+</code></pre>
+
+<p>See <code>ar(1)</code>.
+<!--more--></p>
+
+<h2 id="link-with-static-libraries">Link with Static Libraries</h2>
+
+<pre><code>$ gcc -static -o outputfile file1.c file2.c -L&lt;search path&gt; -l&lt;archive name&gt;
+</code></pre>
+
+<p>Use option <code>-static</code> to avoid linking against shared libraries.  Use option
+<code>-l</code> to specify which libraries are required and <code>-L</code> to specify where to find
+these libraries.  If the required libraries are in system paths (i.e. <code>/lib</code>
+and <code>/usr/lib</code>) <code>-L</code> is not required because the linker will search the system
+path by default.  The paths are searched in the following order:</p>
+
+<ol>
+  <li>The paths specified by <code>-L</code> and by <code>SEARCH_DIR</code> command in the link script (not the default link
+script, but the one specified by <code>-T</code>) in the command line from left to right;</li>
+  <li>The paths specified by <code>SEARCH_DIR</code> command in the default link script if it is not yet replaced
+by the <code>-T</code> option.</li>
+</ol>
+
+<p>The contents of the default link script can be printed by using <code>--verbose</code> option to <code>ld</code>.</p>
+
+<p>See <code>-L</code>, <code>-T</code> and <code>-dT</code> in <code>ld(1)</code>.</p>
+
+<h2 id="how-linkers-use-static-libraries-to-resolve-references">How Linkers Use Static Libraries to Resolve References</h2>
+
+<p>See Section 7.6.3 of Computer Systems: A Programmer’s Perspective.</p>
+
+<p>Watch out for mutual dependences and cyclic dependences of the static libraries.  See option <code>--start-group</code> of <code>ld(1)</code>.</p>
+
+<h2 id="create-shared-libraries">Create Shared Libraries</h2>
+
+<pre><code>$ gcc -shared -fpic -o somename.so file1.c file2.c ... dependent_shared_libraries
+</code></pre>
+
+<p>The dependent shared libraries will be stored in the .dynamic section (its
+type is <code>DT_NEED</code> and its value is whatever you put on the command line
+(absolute or relative path), you can check it using <code>readelf -d</code>) of the
+generated shared object.  It tells the dynamic linker which libraries are
+needed by this shared object.</p>
+
+<h2 id="link-with-shared-libraries">Link with shared libraries</h2>
+
+<pre><code>$ gcc -o outputfile file1.c file2.c ... -L&lt;search path&gt; -l&lt;library name&gt; ... -Wl,-rpath,&lt;path&gt; ...
+</code></pre>
+
+<p>Like linking with static objects, when linking with shared objects the
+linker needs to know which objects are required and where to find them.  It
+uses the same mechanisms as linking with static objects to specify these
+info.  See above “Link with Static Libraries”.</p>
+
+<p>If the shared objects on the command line require other shared objects (you
+can check this by see the entry type <code>DT_NEED</code> of <code>.dynamic</code> section), the
+linker editor needs to know where to find the required shared objects.
+This info can be specified with the option <code>-rpath-link</code> or
+<code>-rpath</code> of ld or by other ways.  See <code>ld(1)</code> about options
+<code>-rpath-link</code> and <code>-rpath</code>.</p>
+
+<p>For example:</p>
+
+<pre><code>$ gcc main.c -L. -lfun -Wl,-rpath,pos
+</code></pre>
+
+<p>where <code>main.c</code> depends libfun.so which depends on some shared objects
+resides in <code>pos</code>.  Option <code>-Wl,</code> is a way for gcc to pass options to <code>ld</code>.</p>
+
+<p>There are other ways to specify the link-time shared objects search path
+other than the above ways and they are searched in the following order:</p>
+
+<ol>
+  <li>-rpath-link</li>
+  <li>-rpath</li>
+  <li>Environment variable <code>LD_LIBRARY_PATH</code></li>
+  <li>system paths <code>/lib</code> and <code>/usr/lib</code></li>
+  <li>the directories specified in <code>/etc/ld.so.conf</code></li>
+</ol>
+
+<p>This is incomplete.  See option <code>-rpath-link</code> of <code>ld(1)</code> for more details.</p>
+
+<h2 id="runtime-shared-objects-search-path">Runtime shared objects search path</h2>
+
+<p>When a executive which depends on some shared objects runs the dynamic
+linker needs to load those shared objects.  So it needs to know two things:
+which shared objects and where to find them.</p>
+
+<p>The required shared objects are stored in the <code>DT_NEED</code> entry (shown as
+“(NEEDED)” in output of <code>readelf -d</code>, may not exist if it does not depend
+on anything) of <code>.dynamic</code> section in the object, which is specified on the
+command line when generating this object file.</p>
+
+<p>If the value of <code>DT_NEED</code> entry is a path (absolute or relative, i.e. has a
+slash) the dynamic linker will try to find it there, and if not found the
+executable can not run.  If it is just a file name the dynamic linker will
+search for it in a series of paths in the following order:</p>
+
+<ol>
+  <li>The paths (separated by colons) in the entry <code>DT_RPATH</code> of <code>.dynamic</code>
+section in the executable (these paths are specified by the option <code>-rpath</code>
+of <code>ld</code> or <code>-Wl,-rpath</code> of gcc);</li>
+  <li>The paths in the environment variable <code>LD_LIBRARY_PATH</code> (separated
+by colons);</li>
+  <li>The paths specified in <code>/etc/ld.so.conf</code> (actually <code>/etc/ld.so.cache</code>,
+so if you edit <code>/etc/ld.so.conf</code> you should run <code>ldconfig</code> to update the
+cache and the shared objects should be named like libxxx.so);</li>
+  <li><code>/lib</code></li>
+  <li><code>/usr/lib</code></li>
+</ol>
+
+<p>Note: all the paths mentioned above is relative to the current working
+directory if it is a relative path.</p>
+
+<p>You can see the searching process by setting the environment variable
+<code>LD_DEBUG</code> to <code>libs</code> when running the executable.  See <code>ld.so(8)</code>.</p>
+
+<h2 id="loading-of-dependent-shared-objects-and-symbol-resolving">Loading of dependent shared objects and symbol resolving</h2>
+
+<p>Often the executive depends on some shared objects, which depends on some
+other objects, which depends on some others, and so on.  So the depend
+relation is like a graph with the executive being the root.  The Linux
+dynamic linker is responsible for loading the dependent shared objects and
+loads them in breadth first search (BFS) order.  The dynamic liner has a
+global symbol table which includes all symbols it knows so far.  The global
+symbol table is used to resolve symbols in the executive when running.  It
+merges the symbol table of the shared object with global symbol table when
+loaded.  If the symbol table has some symbol with the same name as a symbol
+in the global symbol table, it will be ignored.  This will lead to global
+symbol interposition.  So if we want to avoid this problem we must make
+sure the global variables and functions in our programs have unique names.</p>
+
+<p>The phase of symbol resolving begins after all dependent shared objects are
+loaded and global symbol table is constructed.</p>
+
+<p>The procedure of loading and symbol resolving can be checked using the env
+variable <code>LD_DEBUG</code>.  See <code>ld.so(8)</code>.</p>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li><code>ld(1)</code> options <code>-shared</code>, <code>-L</code>, <code>-l</code>, <code>-rpath</code>, <code>-rpath-link</code></li>
+  <li><a href="http://man7.org/linux/man-pages/man8/ld.so.8.html"><code>ld.so(8)</code></a></li>
+  <li>gcc(1) options <code>-shared</code>, <code>-static</code>, and <code>-Wl,</code></li>
+  <li>See <a href="http://refspecs.linuxbase.org/elf/gabi4+/ch5.dynamic.html#shobj_dependencies">here</a> for <code>DT_RPATH</code> and <code>DT_RUNPATH</code>.</li>
+  <li>程序员的自我修养，Sections 7.6, 8.4 and 8.5</li>
+  <li>Computer System: A Programmer’s Perspective, Chapter 7.</li>
+  <li>See <a href="https://wiki.debian.org/Multiarch/LibraryPathOverview">here</a> for multi-arch support on toolchain implications.</li>
+</ul>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[查看进程的内存使用情况]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/02/02/check-process-memory/"/>
+    <updated>2012-02-02T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/02/02/check-process-memory</id>
+    <content type="html"><![CDATA[<h2 id="ps">用ps命令查看进程的内存</h2>
+
+<p><code>ps</code>命令是Linux下常见的查看进程状况的程序，它有几个字段可以用来查看进程内存使用情况：sz，rss，vsz。分别说明如下：</p>
+
+<ul>
+  <li>sz：进程映像所占用的物理页面数量，也就是以物理页面为单位表示的虚拟内存大小；</li>
+  <li>rss：进程当前所占用的物理内存大小，单位为kB；</li>
+  <li>vsz：进程的虚拟内存大小，单位为kB，它等于sz乘于物理页面大小（x86平台通常为4kB）。
+<!--more--></li>
+</ul>
+
+<p>假如我要查看程序<code>a.out</code>的内存使用情况，操作如下：
+<code>
+$ ./a.out &amp;
+[1] 10069
+$ ps -O sz,rsz,vsz
+PID    SZ   RSS    VSZ S TTY          TIME COMMAND
+ 6793  1545  3648   6180 S pts/2    00:00:00 /bin/bash
+10069   404   304   1616 S pts/2    00:00:00 ./a.out
+10070   626   876   2504 R pts/2    00:00:00 ps -O sz,rss,vsz
+</code>
+上面<code>ps</code>命令的输出的第3行就是<code>./a.out</code>自行后的相关情况。我们可以看出，它的虚拟
+内存大小为1616kB，当前占用的物理内存为304kB（其它数据在磁盘上或交换分区），
+虚拟内存占用404个物理页面。由于我的机器的物理页面大小为4kB，可以验证404 x
+4kB等于1616kB。</p>
+
+<h2 id="proc">用/proc文件系统查看进程的内存使用情况</h2>
+
+<p><code>ps</code>命令的输出关于内存的情况不是很详细，尤其是进程所使用的内存中有很大一部分
+是共享库函数使用的，因此通过<code>ps</code>命令的输出看不到进程自己使用了多少内
+存。为了查看更详细的信息，可以借助于<code>/proc</code>文件系统。这个文件系统并存
+在于磁盘上，但是可以象操作其它普通文件一样操作它。它是Linux提供给用户查看进
+程相关信息的接口。在<code>/proc</code>下有2个文件和进程内存有关：
+<code>/proc/&lt;pid&gt;/status</code>和<code>/proc/&lt;pid&gt;/smaps</code>。</p>
+
+<p>通过<code>/proc/&lt;pid&gt;/status</code>可以查看进程的内存使用情况，包括虚拟内存大小
+（VmSize），物理内存大小（VmRSS），数据段大小（VmData），栈的大小（VmStk），
+代码段的大小（VmExe），共享库的代码段大小（VmLib）等等。
+<code>
+$ cat /proc/10069/status
+Name:   a.out
+State:  S (sleeping)
+Tgid:   10069
+Pid:    10069
+PPid:   6793
+TracerPid:      0
+Uid:    1001    1001    1001    1001
+Gid:    1001    1001    1001    1001
+FDSize: 256
+Groups: 1000 1001 
+VmPeak:     1692 kB
+VmSize:     1616 kB
+VmLck:         0 kB
+VmHWM:       304 kB
+VmRSS:       304 kB
+VmData:       28 kB
+VmStk:        88 kB
+VmExe:         4 kB
+VmLib:      1464 kB
+VmPTE:        20 kB
+Threads:        1
+SigQ:   0/16382
+SigPnd: 0000000000000000
+ShdPnd: 0000000000000000
+SigBlk: 0000000000000000
+SigIgn: 0000000000000000
+SigCgt: 0000000000000000
+CapInh: 0000000000000000
+CapPrm: 0000000000000000
+CapEff: 0000000000000000
+CapBnd: ffffffffffffffff
+Cpus_allowed:   f
+Cpus_allowed_list:      0-3
+Mems_allowed:   1
+Mems_allowed_list:      0
+voluntary_ctxt_switches:        1
+nonvoluntary_ctxt_switches:     1
+</code>
+注意，VmData，VmStk，VmExe和VmLib之和并不等于VmSize。这是因为共享库函数的数
+据段没有计算进去（VmData仅包含a.out程序的数据段，不包括共享库函数的数据段，
+也不包括通过mmap映射的区域。VmLib仅包括共享库的代码段，不包括共享库的数据
+段）。</p>
+
+<p>通过<code>/proc/&lt;pid&gt;/smaps</code>可以查看进程整个虚拟地址空间的映射情况，它的输
+出从低地址到高地址按顺序输出每一个映射区域的相关信息，如下所示：
+<code>
+$ cat /proc/10069/smaps
+00110000-00263000 r-xp 00000000 08:07 128311     /lib/tls/i686/cmov/libc-2.11.1.so
+Size:               1356 kB
+Rss:                 148 kB
+Pss:                   8 kB
+Shared_Clean:        148 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         0 kB
+Referenced:          148 kB
+Swap:                  0 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+......
+......
+bfd7f000-bfd94000 rw-p 00000000 00:00 0          [stack]
+Size:                 88 kB
+Rss:                   8 kB
+Pss:                   8 kB
+Shared_Clean:          0 kB
+Shared_Dirty:          0 kB
+Private_Clean:         0 kB
+Private_Dirty:         8 kB
+Referenced:            8 kB
+Swap:                  0 kB
+KernelPageSize:        4 kB
+MMUPageSize:           4 kB
+</code>
+注意：<code>rwxp</code>中，<code>p</code>表示私有映射（采用Copy-On-Write技术）。<code>Size</code>字段就是该区域的大小。</p>
+
+<h2 id="section">参考文献</h2>
+
+<ul>
+  <li><code>ps(1)</code>的<code>-O</code>选项。</li>
+  <li><code>proc(5)</code>的<code>/proc/[pid]/status</code>和<code>/proc/[pid]/smaps</code>条目。</li>
+</ul>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[Linux程序的加载、运行和终止]]></title>
+    <link href="http://spockwangs.github.io/blog/2011/08/20/loading-running-and-termination-of-linux-program/"/>
+    <updated>2011-08-20T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2011/08/20/loading-running-and-termination-of-linux-program</id>
+    <content type="html"><![CDATA[<h2 id="section">简介</h2>
+
+<p>用户在编写程序时都要定义一个<code>main()</code>函数作为程序运行的入口。程序开始
+执行时就从这个函数开始。当这个函数返回时就表明程序运行结束了。可是用户编写的
+程序要能正确运行远不是这么简单。比如，我们不禁要问<code>main()</code>是由谁调用
+的呢？当从<code>main()</code>返回后又运行到哪里去了呢？C++程序中定义的全局对象是
+如何构造的呢？又是如何析构的呢？如果程序是动态链接的，它所依赖的共享库是如何
+加载进内存的？更复杂的是，共享对象中的全局对象是如何构造的和析构的呢？要回答
+这些问题，就不得不弄清程序加载、运行和终止的整个流程，从中也可以知道系统软件
+（包括操作系统、动态链接器、链接编辑器和编译器）为了支持用户程序的正确运行做
+了多么复杂的工作。
+<!--more--></p>
+
+<p>为了支持用户程序的正确运行需要解决以下几个重要问题：</p>
+
+<ul>
+  <li>加载用户程序以及它所依赖的所有共享对象；</li>
+  <li>对用户程序和共享对象进行<strong>符号解析</strong>和<strong>重定位</strong>；</li>
+  <li>向用户程序传递环境变量和命令行参数。</li>
+  <li>根据C++标准的规定，全局对象（包括用户程序和共享库中定义的）必须  在<code>main()</code>执行前初始化，并在程序结束时以相反的顺序析构。</li>
+</ul>
+
+<p>为了理清这些问题，下面我们来分析Linux系统下程序的运行流程。</p>
+
+<h2 id="section-1">术语</h2>
+
+<h3 id="program-header">程序头(Program Header)</h3>
+
+<p>程序头在[gabi]的”Program Header”一节中定义，是ELF文件执行视图的重要部
+分。它规定了ELF文件中的哪些部分段需要加载以及加载的地址以及是否需要动  态链
+接器等信息。若需要动态链接器，程序头中的<code>PT_INTERP</code>指定了动态链接器
+的路径</p>
+
+<h3 id="initialization-and-termination-code">初始化代码和终止代码(Initialization and Termination code)</h3>
+
+<p>每个可执行文件和共享对象都有初始化代码和终止代码。初始化代码在用户程  序开
+始执行前执行。所有的共享对象的初始化代码在可执行文件获得控制权之前执  行。
+终止代码则在进程退出时执行，顺序与初始化代码执行的顺序相反。共享对象  的初
+始化代码和终止代码由动态连接器负责执行。(“Initialization and  Termination
+Functions”, [gabi])</p>
+
+<h3 id="load-time-relocationrun-time-relocation">加载时重定位（Load-time Relocation）和运行时重定位（Run-time Relocation）</h3>
+
+<p>加载时重定位指在动态链接器加载对象文件后就进行的重定位，而运行时重定位  是
+指在用户程序已开始运行后在需要的情况下进行的重定位。PLT表的重定位就属于  运
+行时重定位。在PLT表的帮助下，当第一次调用一个函数时进行重定位，以后再调  用
+时就不用重定位了。若这个函数不被调用则不需要重定位，这可省去加载时重定  位
+的时间。详见[abi386-4]的”Procedure Linkage Table”一节。</p>
+
+<h2 id="section-2">程序运行的基本流程</h2>
+
+<p>首先给出一个大致的流程。</p>
+
+<ol>
+  <li>
+    <p>操作系统运行用户程序时将其映射到内存中；</p>
+  </li>
+  <li>
+    <p>当它看到可执行文件中的<code>PT_INERP</code>时，操作系统 将<code>PT_INTERP</code>指定的动态链接
+器映射进内存，并通过栈向其传递它所需要 的参数，并跳到动态链接器的入口处开始
+执行；</p>
+  </li>
+  <li>
+    <p>动态链接器开始自举（Bootstrap），对自己进行重定位，并开始构造符号  表；</p>
+  </li>
+  <li>
+    <p>自举完成后，动态链接器根据可执行文件.dynamic段中的DT_NEEDED元素开始加 载
+依赖的共享对象，并加入它的符号表。如果这个共享对象依赖其它的共享对象， 动态
+链接器也会加载它们。当这个过程结束时，所有需要的共享对象都已加载进内 存，动
+态链接器也具有了程序和所有共享库的符号表。</p>
+  </li>
+  <li>这时，动态链接器重新遍历共享库，并进行加载时重定位（注意加载时重定位 采
+用依赖图的后序遍历顺序进行。也就是说如果A对象依赖B对象，则先处理B对象再 处理
+A对象）。加载时重定位包括：
+    <ul>
+      <li>对数据的引用，在<code>.rel.dyn</code>段中，需要初始化一个GOT（在<code>.got</code>中）项为一个全局符号的地址；</li>
+      <li>对代码的引用（在<code>.rel.plt</code>段中），需要初始化一个GOT（在<code>.got.plt</code>)项为
+PLT表中第二条指令的地址（’‘Procedure Linkage Table’’, [abi386-4]）。</li>
+    </ul>
+  </li>
+  <li>
+    <p>如果共享对象有初始化代码（在<code>.init</code>中，全局对象的初始化就是这样实
+现的），动态链接器会执行它，并将终止代码（在<code>.fini</code>中，全局对象的 析
+构就是这样实现的）记录下来以便退出时执行。动态链接器不会执行用户程序的 初始
+化代码，它由用户程序的启动代码自己执行。这个过程完成后，所有的共享对 象都已
+重定位并初始化，动态链接器跳到用户程序的入口处开始执行。注意，为了 能在程序
+退出时让动态链接器有机会调用共享对象的终止代码，动态链接器会传递 一个终止函
+数（用以调用共享对象的终止代码）给用户程序。</p>
+  </li>
+  <li>用户程序开始执行。首先它注册动态链接器的终止函数和它自己的终止函数， 然
+后调用用户程序的初始化代码，然后调用用户定义的<code>main()</code>函数。<code>main()</code>函数返
+回后，以注册的相反顺序调用终止函数（也就是说先调用 用户程序的终止函数，再调
+用动态链接器的终止函数），最后调用<code>_exit()</code>退出进程。</li>
+</ol>
+
+<p>详见[Levine]第10章。</p>
+
+<p>下面结合实际代码给出Linux下详细的运行流程。</p>
+
+<h3 id="section-3">程序的加载</h3>
+
+<p>程序的加载是通过执行<code>exec(3)</code>系统调用实现的。当在命令行上执行一个程序或在图
+形界面系统中双击一个可执行文件时最终都是通过这个系统调用来执行程序的。执行这
+个系统调用后，陷入操作系统内核，由操作系统负责加载该程序文件。在操作系统确认
+相关参数后，然后通过内存映射方式加载进内存。若该ELF文件是动态链接的可执行文
+件（程序头中存在<code>PT_INTERP</code>）需要动态连接器的支持，操作系统则将该动态连接器
+映射进内存，并准备好相应的环境，将控制权转移给动态连接器。若ELF文件是静态链
+接的，则操作系统准备好环境后直接转移到ELF文件的入口点开始执行。详细过程如下：</p>
+
+<ol>
+  <li>
+    <p>执行<code>exec(3)</code>调用后陷入操作系统内核，检查参数，并判断可执行文件的类型。
+因为Linux支持的可执行文件不止一种类型，加载不同类型的文件方法不一样。下面假
+设文件类型为ELF。</p>
+  </li>
+  <li>
+    <p>检查ELF文件格式的有效性，读入程序头（Program Header），并检查是否存在
+<code>PT_INTERP</code>项。存在的话说明该文件是动态链接的可执行文件，需要动态连接器的支
+持。</p>
+  </li>
+  <li>
+    <p>根据ELF文件程序头的信息对ELF文件进行映射，通常包括两个段：代码段和数据段。</p>
+  </li>
+  <li>
+    <p>初始化进程运行的堆栈环境，在栈中存储环境变量、命令行参数以及需要传给动态
+连接器的一些附加参数（Auxiliary Vector）。（见[abi386-4]的图3-31）</p>
+  </li>
+  <li>
+    <p>若ELF文件是静态链接的可执行文件，跳转到用户程序入口点（由其程序头定义）
+开始执行；若ELF文件是动态链接的可执行文件，映射动态连接器，并跳转到动态连接
+器的入口处开始执行。</p>
+  </li>
+</ol>
+
+<p>另见[abi386-4]的第5节，[gabi]的”Dynamic Linking”.</p>
+
+<h3 id="section-4">运行动态连接器</h3>
+
+<p>对于动态链接的可执行文件，还需要动态连接器为其加载可执行文件依赖的共享对象文
+件并进行符号重定位才可以执行。动态连接器的位置存储在可执行文件程序头的
+<code>PT_INTERP</code>元素中（见[gabi]”Program Header”一节）。动态连接器的运行过程如
+下：</p>
+
+<ol>
+  <li>
+    <p>动态连接器的入口是<code>_start</code>，在”glibc/sysdeps/i386/dl-machine.h”中的
+<code>RTLD_START</code>宏中定义。它首先调用<code>_dl_start()</code>(glibc/elf/rtld.c)。</p>
+  </li>
+  <li>
+    <p><code>_dl_start()</code>首先对动态连接器自己进行重定位，最后调用<code>_dl_start_final()
+</code>(glibc/elf/rtld.c)收集一些基本的运行时信息后调用<code>_dl_sysdep_start()</code>
+(glibc/elf/dl-sysdep.c).</p>
+  </li>
+  <li>
+    <p><code>_dl_sysdep_start()</code>首先处理由操作系统建立的环境信息（Figure 3-31,
+p.28, [abi386-4]），设置相关参数(<code>_dl_argc:</code> 命令行参数的个数，<code>_dl_argv:</code>
+命令行参数数组，<code>_environ:</code> 环境数组，<code>_dl_auxv:</code> 传递给动态连接器的附加参数
+数组)，在读入<code>_dl_auxv</code>数组存储的信息，最后调用<code>_dl_main()</code>
+(glibc/elf/rtld.c)进行动态连接器的主要任务。</p>
+  </li>
+  <li>
+    <p><code>_dl_main()</code>非常长，主要工作是加载可执行文件依赖的所有共享对象，构造符号
+表，并进行<strong>加载时重定位</strong>（有些重定位可以延迟到需要时再进行，称为<strong>运行时重
+定位</strong>）。考虑到<code>R_386_COPY</code>（见[abi386-4]的78页）重定位类型，要特别加载时重
+定位的顺序（因为需要copy relocation的变量的初始值可能是另一个全局变量的地址，
+所以需要先重定位这个变量）。下面是摘自<code>_dl_main()</code>中的一段注释。</p>
+
+    <blockquote>
+      <p>/* Now we have all the objects loaded.  Relocate them all except for
+the dynamic linker itself.  We do this in reverse order so that copy relocs
+of earlier objects overwrite the data written by later objects.  We do not
+re-relocate the dynamic linker itself in this loop because that could
+result in the GOT entries for functions we call being changed, and that
+would break us.  It is safe to relocate the dynamic linker out of order
+because it has no copy relocs (we know that because it is
+self-contained). */</p>
+    </blockquote>
+
+    <p>简单地说，先重定位一个对象文件所依赖的所有对象文件再重定位这个对象文件。
+重定位完成后返回到<code>_dl_sysdep_start()</code>，然后返回到<code>_dl_start_final()</code>，然后
+再返回到<code>_dl_start()</code>，继续返回到<code>_start</code>。</p>
+  </li>
+  <li>
+    <p><code>_start</code>调用动态连接器的初始化函数（以调用每个共享对象的初始化 代码），
+并把动态连接器的终止函数（以调用每个共享对象的终止代码）地址存入<code>EDX</code>寄存器
+以传给可执行文件，然后跳转到可执行文件的入口处开始执行。</p>
+  </li>
+</ol>
+
+<p>动态连接器任务完成后将控制权转移给用户程序，此时用户程序才正是开始执行。</p>
+
+<h3 id="section-5">用户程序的执行</h3>
+
+<p>不管用户程序是静态的还是动态的可执行文件，它们的入口处都在<code>_start</code>
+(glibc/sysdeps/i386/elf/Start.S)。它首先设置好一些寄存器后调用
+<code>__libc_start_main()</code> (glibc/csu/libc-start.c)。<code>__libc_start_main()</code>主要进
+行以下工作:</p>
+
+<ol>
+  <li>调用<code>__cxa_atexit()</code> (glibc/stdlib/cxa_atexit.c)注册动态连接器通过<code>EDX</code>寄存器传过来的终止函数。</li>
+  <li>调用<code>__cxa_atexit()</code>注册用户程序的终止函数</li>
+  <li>调用用户程序的初始化函数</li>
+  <li>调用用户提供的<code>main()</code>函数</li>
+  <li><code>main()</code>返回后调用<code>exit()</code> (glibc/stdlib/exit.c). <code>exit()</code>以注册的相反
+顺序调用<code>atexit()</code> (glibc/stdlib/atexit.c)和<code>__cxa_atexit()</code>注册的函数，然后
+调用<code>_exit()</code>结束进程。</li>
+</ol>
+
+<h2 id="section-6">参考文献</h2>
+
+<ul>
+  <li>[abi386-4] <em>System V Application Binary Interface: Intel386  Architecture Processor Supplement</em>, Fourth Edition.</li>
+  <li>[gabi4] <em>System V Application Binary Interface</em>, 2001.</li>
+  <li>[Levine] John R. Levine, <em><a href="http://www.iecc.com/linker/">Linkers and Loaders</a></em>.</li>
+  <li><a href="http://ftp.gnu.org/gnu/glibc/">Glibc源代码</a></li>
+</ul>
+]]></content>
+  </entry>
+  
+</feed>

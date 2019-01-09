@@ -1,0 +1,1419 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Programming Practice | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/programming-practice/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[UNIX信号]]></title>
+    <link href="http://spockwangs.github.io/blog/2017/12/02/unix-signals/"/>
+    <updated>2017-12-02T20:27:41+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2017/12/02/unix-signals</id>
+    <content type="html"><![CDATA[<h1 id="introduction">Introduction</h1>
+
+<p>UNIX信号在编程中用的不多，但是对于长时间运行的程序还是很有用的，比如通知程序重新加载配置文件、提早退
+出打印一些信息、监控子进程是否还活着。</p>
+
+<p>本文将澄清UNIX信号的概念，使用信号的注意事项及常用的编程模式。
+<!--more--></p>
+
+<h1 id="unix">UNIX信号的概念</h1>
+
+<p>当触发信号产生的事件发生时（如硬件异常、定时器过期、终端命令或者调用<code>kill()</code>发送信号），信号将发送给
+相关进程或线程。当产生信号时将决定该信号时发送给进程或进程中的某个线程。如果信号的产生原因与线程有关
+（如该线程产生了内存访问异常），则发送给该线程；否则，发送给该进程（例如，终端活动）。</p>
+
+<p>信号产生后，如果没有被阻塞，则投递（deliver）给相关进程或线程执行对应的动作，或者被接受（accept，调用<code>sigwait()</code>系列函数）。</p>
+
+<p>在线程产生到投递之间，信号处于未决状态（pending）。信号在投递前也可以被阻塞。发送给线程的信号，如果被
+阻塞，且该信号的相关动作不是忽略，则该信号将一直处于未决状态，直到：1）解除阻塞；2）被接受；3）其相关
+动作设置为忽略。发送给进程的信号，将发送给愿意接受该信号或没有阻塞该信号的线程处理；如果没有这样的线程
+则一直处于阻塞状态，直到被某个线程：1）解除阻塞；2）接受；3）设置为忽略该信号。如果发送给进程的信号被
+阻塞且其相关动作是忽略时，该信号是否直接丢弃还是处于未决状态是不确定的。</p>
+
+<p>POSIX标准并没有要求信号可以排队，所以一个未决信号重复产生时可能只会投递或接受一次。另外，多个未决信号
+在投递或接受时的顺序也是不确定的。</p>
+
+<p>每个信号都有一个与之关联的动作，如下3种：</p>
+
+<ul>
+  <li>默认
+    <ul>
+      <li>默认动作由系统在程序启动时设置好。注意：有些信号的默认动作是调用<code>_exit()</code>终止程序。</li>
+    </ul>
+  </li>
+  <li>忽略
+    <ul>
+      <li>注意：<code>SIGKILL</code>和<code>SIGSTOP</code>是不能设置为忽略的。</li>
+    </ul>
+  </li>
+  <li>用户自定义函数
+    <ul>
+      <li>用户可设置自定义函数捕获一个信号，但是<code>SIGKILL</code>和<code>SIGSTOP</code>是无法捕获的。另外，<code>SIGSEGV</code>，<code>SIGILL</code>，
+<code>SIGBUS</code>和<code>SIGFPE</code>的捕获函数必须终止程序而不能正常返回。</li>
+      <li>捕获函数的实现必须保证信号安全。</li>
+    </ul>
+  </li>
+</ul>
+
+<h1 id="section">信号安全</h1>
+
+<p>POSIX要求信号的捕获函数必须满足以下要求：</p>
+
+<ul>
+  <li>只能访问<code>errno</code>、<code>volatile sig_atomic_t</code>类型的全局变量或者原子类型的全局变量。</li>
+  <li>只能调用规定的信号安全函数。</li>
+  <li>注意保存和恢复<code>errno</code>.</li>
+</ul>
+
+<p>所以说信号的捕获函数很难实现复杂的逻辑，甚至打印消息也不行（<code>printf()</code>不是信号安全的）。只能通过
+原子变量传递一些简单的信息，线程条件变量和锁都不能用（使用线程锁可能导致死锁）。</p>
+
+<h1 id="section-1">如何注册信号处理函数</h1>
+
+<p>系统提供了两个API注册信号处理函数，简单的版本定义如下：</p>
+
+<p>``` c
+typedef void (*sig_t) (int);</p>
+
+<p>sig_t signal(int sig, sig_t func);
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>注册一个函数，并返回之前注册的函数。当信号投递后信号处理函数执行期间，该信号将被阻塞直到执行完毕，
+</span><span class='line'>防止信号重入。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;复杂的版本定义如下，可设置信号处理有关的更多属性。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;``` c
+</span><span class='line'>struct sigaction {
+</span><span class='line'>    union __sigaction_u __sigaction_u;  /* signal handler &lt;em&gt;/
+</span><span class='line'>    sigset_t sa_mask;               /&lt;/em&gt; signal mask to apply &lt;em&gt;/
+</span><span class='line'>    int     sa_flags;               /&lt;/em&gt; see signal options below */
+</span><span class='line'>};&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;union __sigaction_u {
+</span><span class='line'>     void (&lt;em&gt;__sa_handler)(int);
+</span><span class='line'>     void (&lt;/em&gt;__sa_sigaction)(int, siginfo_t *, void *);
+</span><span class='line'>};&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h1 id="define-sahandler------sigactionusahandler"&gt;define sa_handler      __sigaction_u.__sa_handler&lt;/h1&gt;
+</span><span class='line'>&lt;p&gt;#define sa_sigaction    __sigaction_u.__sa_sigaction&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;int sigaction(int sig, const struct sigaction *restrict act, struct sigaction *restrict oact);</span></code></pre></td></tr></table></div></figure>
+这个API相比于上面的简单版本可以设置信号处理函数执行期间是否阻塞其它信号，或者当信号中断一个慢速的IO
+时是否自动重新执行IO，细节可参考<code>sigaction(2)</code>.</p>
+
+<h1 id="section-2">信号处理的编程模式</h1>
+
+<p>信号处理函数的要求非常严格，除了设置原子变量外也做不了其它事情，下面举一个简单的例子用终端产生信号让
+程序提前结束。</p>
+
+<p>``` c++
+#include <unistd.h>
+#include <signal.h>
+#include <thread></thread></signal.h></unistd.h></p>
+
+<p>volatile sig_atomic_t g_quit = 0;</p>
+
+<p>void stop(int)
+{
+    g_quit = 1;
+}</p>
+
+<p>int main()
+{
+    signal(SIGINT, stop);
+    std::thread(<a href=""></a> {
+                    while (!g_quit) {
+                        sleep(1);
+                    }
+                }).join();
+    return 0;
+}
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+<span class='line-number'>51</span>
+<span class='line-number'>52</span>
+<span class='line-number'>53</span>
+<span class='line-number'>54</span>
+<span class='line-number'>55</span>
+<span class='line-number'>56</span>
+<span class='line-number'>57</span>
+<span class='line-number'>58</span>
+<span class='line-number'>59</span>
+<span class='line-number'>60</span>
+<span class='line-number'>61</span>
+<span class='line-number'>62</span>
+<span class='line-number'>63</span>
+<span class='line-number'>64</span>
+<span class='line-number'>65</span>
+<span class='line-number'>66</span>
+<span class='line-number'>67</span>
+<span class='line-number'>68</span>
+<span class='line-number'>69</span>
+<span class='line-number'>70</span>
+<span class='line-number'>71</span>
+<span class='line-number'>72</span>
+<span class='line-number'>73</span>
+<span class='line-number'>74</span>
+<span class='line-number'>75</span>
+<span class='line-number'>76</span>
+<span class='line-number'>77</span>
+<span class='line-number'>78</span>
+<span class='line-number'>79</span>
+<span class='line-number'>80</span>
+<span class='line-number'>81</span>
+<span class='line-number'>82</span>
+<span class='line-number'>83</span>
+<span class='line-number'>84</span>
+<span class='line-number'>85</span>
+<span class='line-number'>86</span>
+<span class='line-number'>87</span>
+<span class='line-number'>88</span>
+<span class='line-number'>89</span>
+<span class='line-number'>90</span>
+<span class='line-number'>91</span>
+<span class='line-number'>92</span>
+<span class='line-number'>93</span>
+<span class='line-number'>94</span>
+<span class='line-number'>95</span>
+<span class='line-number'>96</span>
+<span class='line-number'>97</span>
+<span class='line-number'>98</span>
+<span class='line-number'>99</span>
+<span class='line-number'>100</span>
+<span class='line-number'>101</span>
+<span class='line-number'>102</span>
+<span class='line-number'>103</span>
+<span class='line-number'>104</span>
+<span class='line-number'>105</span>
+<span class='line-number'>106</span>
+<span class='line-number'>107</span>
+<span class='line-number'>108</span>
+<span class='line-number'>109</span>
+<span class='line-number'>110</span>
+<span class='line-number'>111</span>
+<span class='line-number'>112</span>
+<span class='line-number'>113</span>
+<span class='line-number'>114</span>
+<span class='line-number'>115</span>
+<span class='line-number'>116</span>
+<span class='line-number'>117</span>
+<span class='line-number'>118</span>
+<span class='line-number'>119</span>
+<span class='line-number'>120</span>
+<span class='line-number'>121</span>
+<span class='line-number'>122</span>
+<span class='line-number'>123</span>
+<span class='line-number'>124</span>
+<span class='line-number'>125</span>
+<span class='line-number'>126</span>
+<span class='line-number'>127</span>
+<span class='line-number'>128</span>
+<span class='line-number'>129</span>
+<span class='line-number'>130</span>
+<span class='line-number'>131</span>
+<span class='line-number'>132</span>
+<span class='line-number'>133</span>
+<span class='line-number'>134</span>
+<span class='line-number'>135</span>
+<span class='line-number'>136</span>
+<span class='line-number'>137</span>
+<span class='line-number'>138</span>
+<span class='line-number'>139</span>
+<span class='line-number'>140</span>
+<span class='line-number'>141</span>
+<span class='line-number'>142</span>
+<span class='line-number'>143</span>
+<span class='line-number'>144</span>
+<span class='line-number'>145</span>
+<span class='line-number'>146</span>
+<span class='line-number'>147</span>
+<span class='line-number'>148</span>
+<span class='line-number'>149</span>
+<span class='line-number'>150</span>
+<span class='line-number'>151</span>
+<span class='line-number'>152</span>
+<span class='line-number'>153</span>
+<span class='line-number'>154</span>
+<span class='line-number'>155</span>
+<span class='line-number'>156</span>
+<span class='line-number'>157</span>
+<span class='line-number'>158</span>
+<span class='line-number'>159</span>
+<span class='line-number'>160</span>
+<span class='line-number'>161</span>
+<span class='line-number'>162</span>
+<span class='line-number'>163</span>
+<span class='line-number'>164</span>
+<span class='line-number'>165</span>
+<span class='line-number'>166</span>
+<span class='line-number'>167</span>
+<span class='line-number'>168</span>
+<span class='line-number'>169</span>
+<span class='line-number'>170</span>
+<span class='line-number'>171</span>
+<span class='line-number'>172</span>
+<span class='line-number'>173</span>
+<span class='line-number'>174</span>
+<span class='line-number'>175</span>
+<span class='line-number'>176</span>
+<span class='line-number'>177</span>
+<span class='line-number'>178</span>
+<span class='line-number'>179</span>
+<span class='line-number'>180</span>
+<span class='line-number'>181</span>
+<span class='line-number'>182</span>
+<span class='line-number'>183</span>
+<span class='line-number'>184</span>
+<span class='line-number'>185</span>
+<span class='line-number'>186</span>
+<span class='line-number'>187</span>
+<span class='line-number'>188</span>
+<span class='line-number'>189</span>
+<span class='line-number'>190</span>
+<span class='line-number'>191</span>
+<span class='line-number'>192</span>
+<span class='line-number'>193</span>
+<span class='line-number'>194</span>
+<span class='line-number'>195</span>
+<span class='line-number'>196</span>
+<span class='line-number'>197</span>
+<span class='line-number'>198</span>
+<span class='line-number'>199</span>
+<span class='line-number'>200</span>
+<span class='line-number'>201</span>
+<span class='line-number'>202</span>
+<span class='line-number'>203</span>
+<span class='line-number'>204</span>
+<span class='line-number'>205</span>
+<span class='line-number'>206</span>
+<span class='line-number'>207</span>
+<span class='line-number'>208</span>
+<span class='line-number'>209</span>
+<span class='line-number'>210</span>
+<span class='line-number'>211</span>
+<span class='line-number'>212</span>
+<span class='line-number'>213</span>
+<span class='line-number'>214</span>
+<span class='line-number'>215</span>
+<span class='line-number'>216</span>
+<span class='line-number'>217</span>
+<span class='line-number'>218</span>
+<span class='line-number'>219</span>
+<span class='line-number'>220</span>
+<span class='line-number'>221</span>
+<span class='line-number'>222</span>
+<span class='line-number'>223</span>
+<span class='line-number'>224</span>
+<span class='line-number'>225</span>
+<span class='line-number'>226</span>
+<span class='line-number'>227</span>
+<span class='line-number'>228</span>
+<span class='line-number'>229</span>
+<span class='line-number'>230</span>
+<span class='line-number'>231</span>
+<span class='line-number'>232</span>
+<span class='line-number'>233</span>
+<span class='line-number'>234</span>
+<span class='line-number'>235</span>
+<span class='line-number'>236</span>
+<span class='line-number'>237</span>
+<span class='line-number'>238</span>
+<span class='line-number'>239</span>
+<span class='line-number'>240</span>
+<span class='line-number'>241</span>
+<span class='line-number'>242</span>
+<span class='line-number'>243</span>
+<span class='line-number'>244</span>
+<span class='line-number'>245</span>
+<span class='line-number'>246</span>
+<span class='line-number'>247</span>
+<span class='line-number'>248</span>
+<span class='line-number'>249</span>
+<span class='line-number'>250</span>
+<span class='line-number'>251</span>
+<span class='line-number'>252</span>
+<span class='line-number'>253</span>
+<span class='line-number'>254</span>
+<span class='line-number'>255</span>
+<span class='line-number'>256</span>
+<span class='line-number'>257</span>
+<span class='line-number'>258</span>
+<span class='line-number'>259</span>
+<span class='line-number'>260</span>
+<span class='line-number'>261</span>
+<span class='line-number'>262</span>
+<span class='line-number'>263</span>
+<span class='line-number'>264</span>
+<span class='line-number'>265</span>
+<span class='line-number'>266</span>
+<span class='line-number'>267</span>
+<span class='line-number'>268</span>
+<span class='line-number'>269</span>
+<span class='line-number'>270</span>
+<span class='line-number'>271</span>
+<span class='line-number'>272</span>
+<span class='line-number'>273</span>
+<span class='line-number'>274</span>
+<span class='line-number'>275</span>
+<span class='line-number'>276</span>
+<span class='line-number'>277</span>
+<span class='line-number'>278</span>
+<span class='line-number'>279</span>
+<span class='line-number'>280</span>
+<span class='line-number'>281</span>
+<span class='line-number'>282</span>
+<span class='line-number'>283</span>
+<span class='line-number'>284</span>
+<span class='line-number'>285</span>
+<span class='line-number'>286</span>
+<span class='line-number'>287</span>
+<span class='line-number'>288</span>
+<span class='line-number'>289</span>
+<span class='line-number'>290</span>
+<span class='line-number'>291</span>
+<span class='line-number'>292</span>
+<span class='line-number'>293</span>
+<span class='line-number'>294</span>
+<span class='line-number'>295</span>
+<span class='line-number'>296</span>
+<span class='line-number'>297</span>
+<span class='line-number'>298</span>
+<span class='line-number'>299</span>
+<span class='line-number'>300</span>
+<span class='line-number'>301</span>
+<span class='line-number'>302</span>
+<span class='line-number'>303</span>
+<span class='line-number'>304</span>
+<span class='line-number'>305</span>
+<span class='line-number'>306</span>
+<span class='line-number'>307</span>
+<span class='line-number'>308</span>
+<span class='line-number'>309</span>
+<span class='line-number'>310</span>
+<span class='line-number'>311</span>
+<span class='line-number'>312</span>
+<span class='line-number'>313</span>
+<span class='line-number'>314</span>
+<span class='line-number'>315</span>
+<span class='line-number'>316</span>
+<span class='line-number'>317</span>
+<span class='line-number'>318</span>
+<span class='line-number'>319</span>
+<span class='line-number'>320</span>
+<span class='line-number'>321</span>
+<span class='line-number'>322</span>
+<span class='line-number'>323</span>
+<span class='line-number'>324</span>
+<span class='line-number'>325</span>
+<span class='line-number'>326</span>
+<span class='line-number'>327</span>
+<span class='line-number'>328</span>
+<span class='line-number'>329</span>
+<span class='line-number'>330</span>
+<span class='line-number'>331</span>
+<span class='line-number'>332</span>
+<span class='line-number'>333</span>
+<span class='line-number'>334</span>
+<span class='line-number'>335</span>
+<span class='line-number'>336</span>
+<span class='line-number'>337</span>
+<span class='line-number'>338</span>
+<span class='line-number'>339</span>
+<span class='line-number'>340</span>
+<span class='line-number'>341</span>
+<span class='line-number'>342</span>
+<span class='line-number'>343</span>
+<span class='line-number'>344</span>
+<span class='line-number'>345</span>
+<span class='line-number'>346</span>
+<span class='line-number'>347</span>
+<span class='line-number'>348</span>
+<span class='line-number'>349</span>
+<span class='line-number'>350</span>
+<span class='line-number'>351</span>
+<span class='line-number'>352</span>
+<span class='line-number'>353</span>
+<span class='line-number'>354</span>
+<span class='line-number'>355</span>
+<span class='line-number'>356</span>
+<span class='line-number'>357</span>
+<span class='line-number'>358</span>
+<span class='line-number'>359</span>
+<span class='line-number'>360</span>
+<span class='line-number'>361</span>
+<span class='line-number'>362</span>
+<span class='line-number'>363</span>
+<span class='line-number'>364</span>
+<span class='line-number'>365</span>
+<span class='line-number'>366</span>
+<span class='line-number'>367</span>
+<span class='line-number'>368</span>
+<span class='line-number'>369</span>
+<span class='line-number'>370</span>
+<span class='line-number'>371</span>
+<span class='line-number'>372</span>
+<span class='line-number'>373</span>
+<span class='line-number'>374</span>
+<span class='line-number'>375</span>
+<span class='line-number'>376</span>
+<span class='line-number'>377</span>
+<span class='line-number'>378</span>
+<span class='line-number'>379</span>
+<span class='line-number'>380</span>
+<span class='line-number'>381</span>
+<span class='line-number'>382</span>
+<span class='line-number'>383</span>
+<span class='line-number'>384</span>
+<span class='line-number'>385</span>
+<span class='line-number'>386</span>
+<span class='line-number'>387</span>
+<span class='line-number'>388</span>
+<span class='line-number'>389</span>
+<span class='line-number'>390</span>
+<span class='line-number'>391</span>
+<span class='line-number'>392</span>
+<span class='line-number'>393</span>
+<span class='line-number'>394</span>
+<span class='line-number'>395</span>
+<span class='line-number'>396</span>
+<span class='line-number'>397</span>
+<span class='line-number'>398</span>
+<span class='line-number'>399</span>
+<span class='line-number'>400</span>
+<span class='line-number'>401</span>
+<span class='line-number'>402</span>
+<span class='line-number'>403</span>
+<span class='line-number'>404</span>
+<span class='line-number'>405</span>
+<span class='line-number'>406</span>
+<span class='line-number'>407</span>
+<span class='line-number'>408</span>
+<span class='line-number'>409</span>
+<span class='line-number'>410</span>
+<span class='line-number'>411</span>
+<span class='line-number'>412</span>
+<span class='line-number'>413</span>
+<span class='line-number'>414</span>
+<span class='line-number'>415</span>
+<span class='line-number'>416</span>
+<span class='line-number'>417</span>
+<span class='line-number'>418</span>
+<span class='line-number'>419</span>
+<span class='line-number'>420</span>
+<span class='line-number'>421</span>
+<span class='line-number'>422</span>
+<span class='line-number'>423</span>
+<span class='line-number'>424</span>
+<span class='line-number'>425</span>
+<span class='line-number'>426</span>
+<span class='line-number'>427</span>
+<span class='line-number'>428</span>
+<span class='line-number'>429</span>
+<span class='line-number'>430</span>
+<span class='line-number'>431</span>
+<span class='line-number'>432</span>
+<span class='line-number'>433</span>
+<span class='line-number'>434</span>
+<span class='line-number'>435</span>
+<span class='line-number'>436</span>
+<span class='line-number'>437</span>
+<span class='line-number'>438</span>
+<span class='line-number'>439</span>
+<span class='line-number'>440</span>
+<span class='line-number'>441</span>
+<span class='line-number'>442</span>
+<span class='line-number'>443</span>
+<span class='line-number'>444</span>
+<span class='line-number'>445</span>
+<span class='line-number'>446</span>
+<span class='line-number'>447</span>
+<span class='line-number'>448</span>
+<span class='line-number'>449</span>
+<span class='line-number'>450</span>
+<span class='line-number'>451</span>
+<span class='line-number'>452</span>
+<span class='line-number'>453</span>
+<span class='line-number'>454</span>
+<span class='line-number'>455</span>
+<span class='line-number'>456</span>
+<span class='line-number'>457</span>
+<span class='line-number'>458</span>
+<span class='line-number'>459</span>
+<span class='line-number'>460</span>
+<span class='line-number'>461</span>
+<span class='line-number'>462</span>
+<span class='line-number'>463</span>
+<span class='line-number'>464</span>
+<span class='line-number'>465</span>
+<span class='line-number'>466</span>
+<span class='line-number'>467</span>
+<span class='line-number'>468</span>
+<span class='line-number'>469</span>
+<span class='line-number'>470</span>
+<span class='line-number'>471</span>
+<span class='line-number'>472</span>
+<span class='line-number'>473</span>
+<span class='line-number'>474</span>
+<span class='line-number'>475</span>
+<span class='line-number'>476</span>
+<span class='line-number'>477</span>
+<span class='line-number'>478</span>
+<span class='line-number'>479</span>
+<span class='line-number'>480</span>
+<span class='line-number'>481</span>
+<span class='line-number'>482</span>
+<span class='line-number'>483</span>
+<span class='line-number'>484</span>
+<span class='line-number'>485</span>
+<span class='line-number'>486</span>
+<span class='line-number'>487</span>
+<span class='line-number'>488</span>
+<span class='line-number'>489</span>
+<span class='line-number'>490</span>
+<span class='line-number'>491</span>
+<span class='line-number'>492</span>
+<span class='line-number'>493</span>
+<span class='line-number'>494</span>
+<span class='line-number'>495</span>
+<span class='line-number'>496</span>
+<span class='line-number'>497</span>
+<span class='line-number'>498</span>
+<span class='line-number'>499</span>
+<span class='line-number'>500</span>
+<span class='line-number'>501</span>
+<span class='line-number'>502</span>
+<span class='line-number'>503</span>
+<span class='line-number'>504</span>
+<span class='line-number'>505</span>
+<span class='line-number'>506</span>
+<span class='line-number'>507</span>
+<span class='line-number'>508</span>
+<span class='line-number'>509</span>
+<span class='line-number'>510</span>
+<span class='line-number'>511</span>
+<span class='line-number'>512</span>
+<span class='line-number'>513</span>
+<span class='line-number'>514</span>
+<span class='line-number'>515</span>
+<span class='line-number'>516</span>
+<span class='line-number'>517</span>
+<span class='line-number'>518</span>
+<span class='line-number'>519</span>
+<span class='line-number'>520</span>
+<span class='line-number'>521</span>
+<span class='line-number'>522</span>
+<span class='line-number'>523</span>
+<span class='line-number'>524</span>
+<span class='line-number'>525</span>
+<span class='line-number'>526</span>
+<span class='line-number'>527</span>
+<span class='line-number'>528</span>
+<span class='line-number'>529</span>
+<span class='line-number'>530</span>
+<span class='line-number'>531</span>
+<span class='line-number'>532</span>
+<span class='line-number'>533</span>
+<span class='line-number'>534</span>
+<span class='line-number'>535</span>
+<span class='line-number'>536</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>通知线程退出的前提是该线程周期性检测是否需要退出。但是在比较复杂的场景下，周期检测并不可取，
+</span><span class='line'>需要采取更复杂的通信机制来通知线程退出，比如条件变量，但是信号处理函数是不能操作条件变量的，
+</span><span class='line'>怎么通知呢？&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;回忆一下，信号除了投递调用信号处理函数外还可以被线程主动接受，这样我们可以实现任意复杂的逻辑。
+</span><span class='line'>创建一个线程专门接受信号，而其它所有线程都阻塞这些信号，由这个专用线程来实现通知逻辑。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;```c++
+</span><span class='line'>#include &lt;thread&gt;
+</span><span class='line'>#include &lt;signal.h&gt;
+</span><span class='line'>#include &lt;mutex&gt;
+</span><span class='line'>#include &lt;condition_variable&gt;&lt;/condition_variable&gt;&lt;/mutex&gt;&lt;/signal.h&gt;&lt;/thread&gt;&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;int main()
+</span><span class='line'>{
+</span><span class='line'>    // Block SIGINT for all threads.  The subsequently created threads
+</span><span class='line'>    // will inherit this mask.
+</span><span class='line'>    sigset_t set;
+</span><span class='line'>    sigemptyset(&amp;set);
+</span><span class='line'>    sigaddset(&amp;set, SIGINT);
+</span><span class='line'>    pthread_sigmask(SIG_BLOCK, &amp;set, NULL);&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;std::condition_variable cv;
+</span><span class='line'>
+</span><span class='line'>// Start a thread dedicated to process signals.
+</span><span class='line'>std::thread([&amp;] {
+</span><span class='line'>                int sig;
+</span><span class='line'>                sigwait(&amp;set, &amp;sig);
+</span><span class='line'>                if (sig == SIGINT) {
+</span><span class='line'>                    cv.notify_one();
+</span><span class='line'>                }
+</span><span class='line'>            }).detach();
+</span><span class='line'>
+</span><span class='line'>// The worker thread.
+</span><span class='line'>std::thread([&amp;] {
+</span><span class='line'>                std::mutex mutex;
+</span><span class='line'>                std::unique_lock&lt;std::mutex&gt; lock(mutex);
+</span><span class='line'>                cv.wait(lock);
+</span><span class='line'>            }).join();
+</span><span class='line'>return 0; } ```
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h1 id="conclusion"&gt;Conclusion&lt;/h1&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;在处理信号时，如果只需要周期性检查信号是否已经发生，则可注册一个信号处理函数即可搞定。但是如果需要
+</span><span class='line'>处理复杂逻辑，则最好创建一个专用线程来同步处理信号。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h1 id="references"&gt;References&lt;/h1&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ul&gt;
+</span><span class='line'>  &lt;li&gt;&lt;a href="http://pubs.opengroup.org/onlinepubs/9699919799/"&gt;POSIX Spec&lt;/a&gt;, System Interfaces, Singal Concepts&lt;/li&gt;
+</span><span class='line'>&lt;/ul&gt;
+</span><span class='line'>]]&gt;&lt;/content&gt;
+</span><span class='line'>  &lt;/entry&gt;
+</span><span class='line'>  
+</span><span class='line'>  &lt;entry&gt;
+</span><span class='line'>    &lt;title type="html"&gt;&lt;![CDATA[使用Feature Flags进行并行开发和持续集成]]&gt;&lt;/title&gt;
+</span><span class='line'>    &lt;link href="http://spockwangs.github.io/blog/2014/09/03/using-feature-flags-enable-concurrent-dev/"/&gt;
+</span><span class='line'>    &lt;updated&gt;2014-09-03T00:00:00+08:00&lt;/updated&gt;
+</span><span class='line'>    &lt;id&gt;http://spockwangs.github.io/blog/2014/09/03/using-feature-flags-enable-concurrent-dev&lt;/id&gt;
+</span><span class='line'>    &lt;content type="html"&gt;&lt;![CDATA[&lt;h2 id="introduction"&gt;Introduction&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;在服务开发过程中经常需要一边修复线上bug，一边又要开发新特性，而且可能需要同时开发好几个新特性，不同
+</span><span class='line'>的新特性开发持续的时间不等。这样要等到所有代码都开发完、测试好需要很长时间，代码一直处于无法上线的状
+</span><span class='line'>态，无法敏捷响应需求。如果这时候线上又出现紧急bug，就没法及时发布修复。
+</span><span class='line'>&lt;!--more--&gt;&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="feature-branch"&gt;使用feature branch的解决方案&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;为了防止修复bug和特性开发不相互干扰，并能及时响应线上bug，一般采用源代码版本管理系统的分支功能：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ul&gt;
+</span><span class='line'>  &lt;li&gt;trunk分支是经过严格测试的稳定分支，随时处于发布状态，并与线上代码一致；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;每个特性可以另开一个branch开发，等到稳定后再合入trunk发布；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;修复bug时也开一个branch开发，验证通过后再合入trunk发布。&lt;/li&gt;
+</span><span class='line'>&lt;/ul&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;笔者采用这种传统的解决方案使用了一段时间，确实可以解决并行开发的问题，但是在实践中也发现了一些恼火的
+</span><span class='line'>问题：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ul&gt;
+</span><span class='line'>  &lt;li&gt;一个潜在的风险是合入trunk，多个特性单独测试是ok的，一旦合入就容易引起bug，所以合入trunk后还得继续
+</span><span class='line'>测试；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;SVN操作比较复杂：建立分支，开发，合并trunk的更新，反向合入trunk，测试，提交trunk，删除branch。对于
+</span><span class='line'>新手来讲更容易出错，尤其是多人开发时需要解决冲突，严重影响效率。&lt;/li&gt;
+</span><span class='line'>&lt;/ul&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="feature-flag"&gt;使用feature flag&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;要解决SVN操作复杂的问题就必须停止使用branch开发，只使用trunk。但是trunk又必须保持随时可以发布的状态。
+</span><span class='line'>这可以借助于灰度发布的思想解决，新特性若没开发完毕可以使其代码不生效，用户看不见，待到成熟后再上线，
+</span><span class='line'>这可以采用开关控制其是否上线，就像一个个模块一样，可要可不要。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;我们可以为每个特性取一个名字，在配置文件中控制其是否上线：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;use-new-feature=true
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;然后在代码中这样判断：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;if (config-&gt;isFeatureLaunched("use-new-feature")) {
+</span><span class='line'>    // 新特性代码。
+</span><span class='line'>    ...
+</span><span class='line'>}
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;更进一步，开关出了打开和关闭这两种状态外还可以引入中间状态，进行灰度测试：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;use-new-feature=10%
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;意思是说对于10%的用户使用新特性，灰度测试新特性是否正常。并且在某些情况下如果出了紧急问题可以先用开
+</span><span class='line'>关关掉，提供有损服务。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;引入feature flag后我们完全可以换个角度去看待特性开发。每个特性可以看成一个个独立的模块，可以上线也可
+</span><span class='line'>以下线，可从技术角度和业务角度决定是否上线，更好地降低了特性之间的耦合。&lt;/p&gt;
+</span><span class='line'>]]&gt;&lt;/content&gt;
+</span><span class='line'>  &lt;/entry&gt;
+</span><span class='line'>  
+</span><span class='line'>  &lt;entry&gt;
+</span><span class='line'>    &lt;title type="html"&gt;&lt;![CDATA[用MySql实现事务型消息队列]]&gt;&lt;/title&gt;
+</span><span class='line'>    &lt;link href="http://spockwangs.github.io/blog/2014/06/19/implement-transactional-queue-using-mysql/"/&gt;
+</span><span class='line'>    &lt;updated&gt;2014-06-19T00:00:00+08:00&lt;/updated&gt;
+</span><span class='line'>    &lt;id&gt;http://spockwangs.github.io/blog/2014/06/19/implement-transactional-queue-using-mysql&lt;/id&gt;
+</span><span class='line'>    &lt;content type="html"&gt;&lt;![CDATA[&lt;h2 id="introduction"&gt;Introduction&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;在离线数据处理系统中，为了解除模块之间的耦合关系，往往需要消息队列来实现模块之间的通信。对于离线系统来讲，消息队列要满足以下要求：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ul&gt;
+</span><span class='line'>  &lt;li&gt;消息不能丢失，即使在系统失败的情况下。消息一旦被插入就一定会被至少处理一次（只被处理一次是最好的，但是实现起来有难度，所以只要求at-least-once semantic）；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;FIFO顺序；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;支持多生产者；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;支持多消费者。每个消息只能被其中一个消费者处理。
+</span><span class='line'>&lt;!--more--&gt;&lt;/li&gt;
+</span><span class='line'>&lt;/ul&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="section"&gt;第一次尝试&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;为了满足事务特性，最简单的做法就是用MySql数据库来实现这个队列。为了支持FIFO顺序，可以用MySql的自增ID来排序，先进入的消息ID要小些。MySql数据库是支持并发操作的，这就自动支持了多生产者的情况。为了支持多消费者并且每个消息只被一个消费者处理，可以为每个消费者分配一个ID，当某个消息正在被消费者处理时，这个消费者就被认为是这个消息的owner。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;根据以上思路，构造表如下：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;CREATE TABLE message_queue (
+</span><span class='line'>  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+</span><span class='line'>  
+</span><span class='line'>  -- owner为NULL时表示消息未被处理；否则正在被某个消费者处理，其值就是这个消费者的ID
+</span><span class='line'>  owner VARBINARY(255),
+</span><span class='line'>  message VARBINARY(255) NOT NULL
+</span><span class='line'>);
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;其中&lt;code&gt;message&lt;/code&gt;是跟业务相关的消息数据，可以是一个字段也可以是多个字段。那么enqueue操作如下：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;insert into message_queue (message) values ('a message');
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;dequeue操作有点复杂，分3步：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;
+</span><span class='line'>    &lt;p&gt;获取未被处理的消息。先占有这些消息，设置owner。为了加快速度减少访问数据库的频率，可以批量操作；&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>    &lt;pre&gt;&lt;code&gt; update message_queue set owner='me' where owner is null limit 10;
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>    &lt;p&gt;根据&lt;a href="http://dev.mysql.com/doc/refman/5.0/en/mysql-affected-rows.html"&gt;&lt;code&gt;mysql_affected_rows()&lt;/code&gt;&lt;/a&gt;的返回结果可以判断是否有未被处理的消息。若有，则取出消息：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>    &lt;pre&gt;&lt;code&gt; select message from message_queue where owner='me';
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>    &lt;p&gt;注意，&lt;code&gt;update&lt;/code&gt;操作是根据自增ID的顺序操作的，这就实现了FIFO。若把这两步合并成一个事务执行会造成对表的锁占用过多时间（多了一个请求响应来回时间）。&lt;/p&gt;
+</span><span class='line'>  &lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;处理消息，此时表不会被锁住，其它消费者也可以获取消息；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;
+</span><span class='line'>    &lt;p&gt;处理完毕后从数据库中删除。对于处理出错的消息可以根据业务要求重试、忽略或者插入消息队列待下次再处理。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>    &lt;pre&gt;&lt;code&gt; delete from message_queue where owner='me'
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>  &lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;上面没有考虑失败的情况。如果某个消费者在第1步和第2步之间失败的话，一个被占用的消息可能永远不会再被处理，即使此时有其它消费者还在运行，这就不满足at-least-once的要求了。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="section-1"&gt;考虑消费者失败的情况&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;为了解决考虑消费者失败的情况，一个比较简单的方法就是对消费者进行监控（比如采用心跳），一旦失败就将其占有的但是还未删除的消息的&lt;code&gt;owner&lt;/code&gt;设置成&lt;code&gt;null&lt;/code&gt;。但是由谁来监控呢？容易想到的方法可能是单独建立一个服务对每个消费者进行监控，不过对于我们这里的简单问题不需要这么复杂，而且我本人不喜欢这种主从不对称的解决方案（毕竟谁来监控这个监控服务呢？）。我们可以让消费者相互监控。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;每当消费者取消息时，如果发现有消息虽然被占用但是却长时间没有处理完毕，那么就认为该消息的&lt;code&gt;owner&lt;/code&gt;失败了，这个消息就可以被占用。为了判断消息处理是否超时，增加一个字段表示该消息被处理的时间戳：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;CREATE TABLE message_queue (
+</span><span class='line'>  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+</span><span class='line'>  
+</span><span class='line'>  -- owner为NULL时表示消息未被处理；否则正在被某个消费者处理，其值就是这个消费者的ID
+</span><span class='line'>  owner VARBINARY(255),
+</span><span class='line'>  
+</span><span class='line'>  -- 最近一次被owner取出的时间
+</span><span class='line'>  dequeued_time DATETIME,
+</span><span class='line'>  message VARBINARY(255) NOT NULL
+</span><span class='line'>);
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;&lt;code&gt;dequeue&lt;/code&gt;的第1步的update操作改为如下（假设消息处理的耗时不超过60s）：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;update message_queue set owner='me',dequeued_time=NOW() 
+</span><span class='line'>    where owner is null or dequeued_time &lt; SUBTIME(NOW(), SEC_TO_TIME(60)) limit 10;
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;这样即使消费者A在第1步和第2步之间失败了，消费者B还可以重新取出该消息重新处理。所以只要还有消费者在，消息至少会被处理一次。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="section-2"&gt;如何实现只处理一次呢？&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;如果消费者在第2步和第3步之间失败的话，这个消息就会被再次取出来处理一次，这样就一共处理了2次。要保证每个消息只被处理一次，也就是要保证第2步和第3步是一个原子操作，要么都做，要么都不做。换句话说，第2步和第3步要合并成一个事务操作，但是这两步涉及到的是两个不同的实体（一个视业务逻辑而定，一个是MySql数据库），用事务处理的概念来讲就是两个不同的resource manager，必须采用分布式事务协议（比如两步提交协议）才能实现事务语义，这已远超出本文的范围了，不在这里赘述。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="see-also"&gt;See also&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ul&gt;
+</span><span class='line'>  &lt;li&gt;&lt;a href="https://blog.engineyard.com/2011/5-subtle-ways-youre-using-mysql-as-a-queue-and-why-itll-bite-you/"&gt;5-subtle-ways-youre-using-mysql-as-a-queue-and-why-itll-bite-you&lt;/a&gt;&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;&lt;a href="https://www.rabbitmq.com/"&gt;RabbitMQ&lt;/a&gt;是一个消息队列解决方案，毕竟用数据库实现只是权宜之计&lt;/li&gt;
+</span><span class='line'>&lt;/ul&gt;
+</span><span class='line'>]]&gt;&lt;/content&gt;
+</span><span class='line'>  &lt;/entry&gt;
+</span><span class='line'>  
+</span><span class='line'>  &lt;entry&gt;
+</span><span class='line'>    &lt;title type="html"&gt;&lt;![CDATA[Web应用开发中的几个问题]]&gt;&lt;/title&gt;
+</span><span class='line'>    &lt;link href="http://spockwangs.github.io/blog/2014/01/01/web-app-dev/"/&gt;
+</span><span class='line'>    &lt;updated&gt;2014-01-01T00:00:00+08:00&lt;/updated&gt;
+</span><span class='line'>    &lt;id&gt;http://spockwangs.github.io/blog/2014/01/01/web-app-dev&lt;/id&gt;
+</span><span class='line'>    &lt;content type="html"&gt;&lt;![CDATA[&lt;h2 id="introduction"&gt;Introduction&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;由于Ajax技术在Gmail中的成功应用和高性能的V8引擎的推出使得编写Web应用变得流行
+</span><span class='line'>起来，使用前端技术也可以编写具有复杂交互的应用。相对于native应用，Web应用具
+</span><span class='line'>有如下优点：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ul&gt;
+</span><span class='line'>  &lt;li&gt;跨平台，开发和维护成本低；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;升级和发布方便，没有版本的概念，随时随地发布，用户没有感知，不需要安装；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;响应式设计(Responsive Design)使得Web应用可以跨平台，同一份代码自适应各种
+</span><span class='line'>屏幕大小&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;即使最终不采用Web应用方案，也很适合开发原型
+</span><span class='line'>&lt;!--more--&gt;&lt;/li&gt;
+</span><span class='line'>&lt;/ul&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;当然，Web应用也不是没有缺点。由于不同平台和厂商的浏览器并不完全一样，跨平台
+</span><span class='line'>也有一些兼容成本。另外，Web应用的性能不如native应用，交互有时候不是很流畅，
+</span><span class='line'>再加上HTML5的API上的限制，使得有些功能采用Web应用不太合适。由于这些原因，结
+</span><span class='line'>合两者优点的混合方案变得流行起来（比如微信、手机QQ和手机QQ浏览器中会嵌入一
+</span><span class='line'>些Web页面）。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;根据笔者的开发经验，下面总结一些Web应用开发过程中的要面临的几个问题。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="section"&gt;模块化编程&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;模块化编程是编写大规模应用必不可少的一个特性，与其它主流的编程语言相比
+</span><span class='line'>Javascript没有对模块提供直接的支持，更不用说维护模块之间的依赖关系，这使得维
+</span><span class='line'>护Javascript代码变得异常困难，在&lt;code&gt;&lt;script&gt;&lt;/code&gt;标签中包含代码的顺序需要人工维护。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;要支持模块化编程必须解决两个问题：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;支持编写模块并为模块命名，防止名字冲突和全局变量的使用；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;支持显示指定模块之间的依赖关系，并在程序执行时自动加载依赖的模块。&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Douglas Crockford在”Javascript: The Good Parts”一书中提出的Module Pattern利
+</span><span class='line'>用Javascript的闭包技术来模拟模块的概念，防止名字冲突和全局变量的使用。这解
+</span><span class='line'>决了第一个问题。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;var moduleName = function () {
+</span><span class='line'>    // Define private variables and functions
+</span><span class='line'>    var private = ...
+</span><span class='line'>
+</span><span class='line'>    // Return public interface.
+</span><span class='line'>    return {
+</span><span class='line'>        foo: ...
+</span><span class='line'>    };
+</span><span class='line'>}();
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;为了解决第二个问题&lt;a href="http://www.commonjs.org/"&gt;CommonJS&lt;/a&gt;组织定义了
+</span><span class='line'>&lt;a href="http://wiki.commonjs.org/wiki/Modules/AsynchronousDefinition"&gt;AMD规范&lt;/a&gt;方便
+</span><span class='line'>开发者显示指定模块之间的依赖关系，并在需要时加载依赖的模块。
+</span><span class='line'>&lt;a href="http://requirejs.org/"&gt;RequireJS&lt;/a&gt;是AMD规范的一个比较流行的实现。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;首先我们在&lt;code&gt;a.js&lt;/code&gt;中定义模块&lt;code&gt;A&lt;/code&gt;.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;define(function () {
+</span><span class='line'>    return {
+</span><span class='line'>        color: "black",
+</span><span class='line'>        size: 10
+</span><span class='line'>    };
+</span><span class='line'>});
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;然后定义模块&lt;code&gt;B&lt;/code&gt;依赖模块&lt;code&gt;A&lt;/code&gt;.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;define(["a"], function (A) {
+</span><span class='line'>    // ...
+</span><span class='line'>});
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;当模块&lt;code&gt;B&lt;/code&gt;执行时RequireJS保证模块&lt;code&gt;A&lt;/code&gt;已被加载。具体细节可参考RequireJS官方文
+</span><span class='line'>档。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="section-1"&gt;脚本加载&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;最简单的脚本加载方式是放在&lt;code&gt;&lt;head&gt;&lt;/code&gt;加载。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;&lt;head&gt;
+</span><span class='line'>  &lt;script src="base.js" type="text/javascript"&gt;&lt;/script&gt;
+</span><span class='line'>  &lt;script src="app.js" type="text/javascript"&gt;&lt;/script&gt;
+</span><span class='line'>&lt;/head&gt;
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;其缺点是：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;加载和解析是顺序是同步执行的，先下载&lt;code&gt;base.js&lt;/code&gt;然后解析和执行，然后再下载
+</span><span class='line'>&lt;code&gt;app.js&lt;/code&gt;；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;加载脚本时还会阻塞对&lt;code&gt;&lt;script&gt;&lt;/code&gt;之后的DOM元素的渲染。&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;为了缓解这些问题，现在的普遍做法是将&lt;code&gt;&lt;script&gt;&lt;/code&gt;放在&lt;code&gt;&lt;body&gt;&lt;/code&gt;的底部。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;  &lt;script src="base.js" type="text/javascript"&gt;&lt;/script&gt;
+</span><span class='line'>  &lt;script src="app.js" type="text/javascript"&gt;&lt;/script&gt;
+</span><span class='line'>&lt;/body&gt;
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;但并不是所有的脚本都可以放在&lt;code&gt;&lt;body&gt;&lt;/code&gt;的底部，比如有些逻辑要在页面渲染时执行，
+</span><span class='line'>不过大多数脚本没有这样的要求。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;将脚本放在&lt;code&gt;&lt;body&gt;&lt;/code&gt;底部仍然没有解决顺序下载的问题，一些浏览器厂商也意识到了
+</span><span class='line'>这个问题并开始支持异步下载。HTML5也提供了标准的解决方案：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;&lt;script src="base.js" type="text/javascript" async&gt;&lt;/script&gt;
+</span><span class='line'>&lt;script src="app.js" type="text/javascript" async&gt;&lt;/script&gt;
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;标上&lt;code&gt;async&lt;/code&gt;属性的脚本表明你没有在里面使用&lt;code&gt;document.write&lt;/code&gt;之类的代码。浏览器
+</span><span class='line'>将异步下载和执行这些脚本，并且不会阻止DOM树的渲染。但是这会导致另一个问题：
+</span><span class='line'>由于是异步执行，&lt;code&gt;app.js&lt;/code&gt;可能在&lt;code&gt;base.js&lt;/code&gt;之前执行，如果它们之间有依赖关系这将
+</span><span class='line'>导致错误。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;讲到这里从开发者角度来看我们其实需要的是这些特性：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;异步下载，不要阻塞DOM的渲染；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;按照模块的依赖关系解析和执行脚本。&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;所以脚本的加载其实需要与模块化编程问题结合起来解决。RequireJS不仅记录了模
+</span><span class='line'>块之间的依赖关系，并且提供了根据依赖关系的按需加载和执行（详情请参考
+</span><span class='line'>RequireJS官方文档）。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;关于脚本加载的更多方案请看
+</span><span class='line'>&lt;a href="http://www.html5rocks.com/en/tutorials/speed/script-loading/?redirect_from_locale=zh"&gt;这里&lt;/a&gt;.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="section-2"&gt;静态资源文件的部署&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;这里的静态资源文件是指CSS、Javascript和CSS需要的一些图片文件。它们的部署需
+</span><span class='line'>要考虑两个问题：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;下载速度&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;版本管理&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;静态资源文件的一个特点变化不频繁，且与用户身份无关（即与Cookie无关），因此
+</span><span class='line'>很适合缓存。另一方面，一旦静态资源文件变化时，浏览器必须从Web服务器下载最新
+</span><span class='line'>的版本。当发布新版本的Web应用时，并不是所有用户马上就用上新版本，老版本和新
+</span><span class='line'>版本将会共存，这就涉及到版本匹配问题。老版本的应用需要下载老版本的CSS和
+</span><span class='line'>Javascript，新版本的应用需要下载新版本的静态资源。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;为了防止版本不一致，每当发布新版本的应用时静态资源文件都需要改名，让旧的
+</span><span class='line'>HTML引用旧的静态文件，新的HTML引用新的静态文件。一个常见办法就是在文件名
+</span><span class='line'>中加时间戳；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;为了防止悬挂引用，资源文件应该比HTML先发布。&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;上述方案可以解决版本问题，这样每个静态文件的缓存时间可以设置得任意大，防止
+</span><span class='line'>重复下载，同时在新版本发布时浏览器将及时更新。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;为解决下载速度问题，可以考虑以下几个方案：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;合并静态文件以免文件数量过多，过多的文件需要更多的连接来下载，浏览器通常
+</span><span class='line'>对同一个域名的连接数量有限制；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;压缩静态文件；为了可读性，CSS和Javascript通常有很多空行、缩进和注释，这
+</span><span class='line'>些在发布时都可以去掉；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;静态文件通常与Cookie没有关系，所以为了减小传输大小和增加缓存命中率（缓存
+</span><span class='line'>的key需要考虑Cookie），静态文件最好托管在没有Cookie的域名上；&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;最后也是最重要的，要使上述过程自动化。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="mvc"&gt;MVC编程模型&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Web应用采用的是事件驱动编程模型，与native应用是一样的，区别仅在于基础设施提
+</span><span class='line'>供的API不一样。UI编程通常采用MVC设计模式，以流行的
+</span><span class='line'>&lt;a href="http://backbonejs.org/"&gt;Backbone.js&lt;/a&gt;为例包括如下部分：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;Model
+</span><span class='line'>    &lt;ul&gt;
+</span><span class='line'>      &lt;li&gt;数据的唯一来源&lt;/li&gt;
+</span><span class='line'>      &lt;li&gt;负责获取和存储数据&lt;/li&gt;
+</span><span class='line'>      &lt;li&gt;可提供缓存机制&lt;/li&gt;
+</span><span class='line'>      &lt;li&gt;数据变化时通过事件通知其它对象&lt;/li&gt;
+</span><span class='line'>    &lt;/ul&gt;
+</span><span class='line'>  &lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;View
+</span><span class='line'>    &lt;ul&gt;
+</span><span class='line'>      &lt;li&gt;负责渲染&lt;/li&gt;
+</span><span class='line'>      &lt;li&gt;监听UI事件和Model事件并重绘UI&lt;/li&gt;
+</span><span class='line'>      &lt;li&gt;渲染结果取决于两类数据：Model和UI交互状态&lt;/li&gt;
+</span><span class='line'>      &lt;li&gt;UI的交互状态通常存在View对象中，有时候为了方便也存在DOM树节点中&lt;/li&gt;
+</span><span class='line'>      &lt;li&gt;为了降低渲染成本，尽量减少需要渲染的区域，每次当数据变化时只渲染受影响
+</span><span class='line'>的区域&lt;/li&gt;
+</span><span class='line'>    &lt;/ul&gt;
+</span><span class='line'>  &lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;Router
+</span><span class='line'>    &lt;ul&gt;
+</span><span class='line'>      &lt;li&gt;负责监听URL的变化，并通知相应的View对象渲染页面&lt;/li&gt;
+</span><span class='line'>    &lt;/ul&gt;
+</span><span class='line'>  &lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;为了有效地使用MVC，有几个问题需要注意。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h3 id="modelview"&gt;Model应与View完全隔离&lt;/h3&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Model仅提供数据的访问，不应该依赖View，因此Model不应该知道View的存在。所以
+</span><span class='line'>Model不能持有对任何View对象的引用。Model的数据发生变化时只能通过事件通知
+</span><span class='line'>View.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h3 id="viewui"&gt;View在初始化时采用委派方式监听UI事件&lt;/h3&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;这里有两个关键点：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;
+</span><span class='line'>    &lt;p&gt;在初始化时监听事件&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>    &lt;p&gt;var View = Backbone.View.extend({
+</span><span class='line'>     initialize: function () {
+</span><span class='line'>         this.$el.on(‘click’, ‘#id’, function () {
+</span><span class='line'>             // …
+</span><span class='line'>         });
+</span><span class='line'>     }
+</span><span class='line'> });&lt;/p&gt;
+</span><span class='line'>  &lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;除了一些特殊情况外（请看下文），所有UI事件都应该在View初始化时初始化，防止同
+</span><span class='line'>一个事件被绑定多次。即使有些事件是动态监听的（有时候需要监听，有时候有不需要
+</span><span class='line'>监听，比如有些按钮有时候是有效的，有时候又无效），也需要在初始化时监听，然后
+</span><span class='line'>在事件回调函数里判断是否需要处理。这样逻辑更简单，更容易维护。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;采用委派方式监听UI事件&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;关于委派方式监听请参考&lt;a href="http://api.jquery.com/on/"&gt;jQuery文档&lt;/a&gt;.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;上面已强调要在初始化时监听事件，但是初始化时需要监听的DOM节点可能还不存在，
+</span><span class='line'>所以没法直接绑定事件，只能采用委派方式。不过采用委派方式要求事件可以冒泡。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;对于那些没法冒泡的事件（比如&lt;code&gt;&lt;img&gt;&lt;/code&gt;的&lt;code&gt;load&lt;/code&gt;事件）只能在保证其存在的情况下直
+</span><span class='line'>接绑定，而不一定要在初始化时绑定。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h3 id="view"&gt;复杂的View组织成树形层次结构&lt;/h3&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;函数太大了需要拆分成几个子函数。同样，View的逻辑如果过于复杂也应根据页面结
+</span><span class='line'>构拆成几个子View：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;父View通过引用访问子View，但是子View不应该持有父View的引用；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;子View只负责自己区域的渲染，其它区域由父View负责渲染；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;父View通过函数调用访问子View的功能，子View通过事件与父View通信；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;子View之间不能直接通信。&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;其它技巧可查看
+</span><span class='line'>&lt;a href="http://coding.smashingmagazine.com/2013/08/09/backbone-js-tips-patterns/"&gt;Backbone技巧与模式&lt;/a&gt;.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="section-3"&gt;离线应用缓存&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;为使Web应用体验更加流畅，可考虑使用HTML5离线应用缓存，不过有以下几点需要注
+</span><span class='line'>意：&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;不要将离线应用缓存与HTTP缓存机制搞混淆，前者是HTML5引入的新特性，与HTTP缓
+</span><span class='line'>存机制是相互独立并存的；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;Cache manifest文件不应被HTTP缓存太久（通过HTTP头&lt;code&gt;Cache-Control&lt;/code&gt;控制缓存
+</span><span class='line'>时间），否则发布新版后浏览器不会及时监测到变化并下载新文件；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;在Cache manifest文件的&lt;code&gt;NETWORK&lt;/code&gt;节放一个&lt;code&gt;*&lt;/code&gt;，否则没有列在这个文件的资源不
+</span><span class='line'>会被请求；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;不适合缓存的请求最好都放在&lt;code&gt;NETWORK&lt;/code&gt;节；&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;如果之前使用过离线应用缓存现在不想再使用了，从&lt;code&gt;&lt;html&gt;&lt;/code&gt;删除&lt;code&gt;manifest&lt;/code&gt;属性，
+</span><span class='line'>并发送404响应给manifest文件请求。仅仅删除&lt;code&gt;manifest&lt;/code&gt;属性是没有效的。&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="section-4"&gt;线上错误报告&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Javascript是一个动态语言，许多检查都是在运行时执行的，所以大多数错误只有执
+</span><span class='line'>行到的时候才能检查到，只能在发布前通过大量测试来发现。即使这样仍可能有少数
+</span><span class='line'>没有执行到的路径有错误，这只能通过线上错误报告来发现了。&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;pre&gt;&lt;code&gt;window.onerror = function (errorMsg, fileLoc, linenumber) {
+</span><span class='line'>    var s = 'url: ' + document.URL + '\nfile:  ' + fileLoc
+</span><span class='line'>        + '\nline number: ' + linenumber
+</span><span class='line'>        + '\nmessage: ' + errorMsg;
+</span><span class='line'>    Log.error(s);       // 发给服务器统计监控
+</span><span class='line'>    console.log(s);
+</span><span class='line'>};
+</span><span class='line'>&lt;/code&gt;&lt;/pre&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;通常线上的Javascript都是经过了合并和压缩的，上报的文件名和行号基本上没法对
+</span><span class='line'>应到源代码，对查错帮助不是很大。不过最新版的Chrome支持在&lt;code&gt;onerror&lt;/code&gt;的回调函数
+</span><span class='line'>中获取出错时的栈轨迹：&lt;code&gt;window.event.error.stack&lt;/code&gt;.&lt;/p&gt;
+</span><span class='line'>]]&gt;&lt;/content&gt;
+</span><span class='line'>  &lt;/entry&gt;
+</span><span class='line'>  
+</span><span class='line'>  &lt;entry&gt;
+</span><span class='line'>    &lt;title type="html"&gt;&lt;![CDATA[C++ Idioms]]&gt;&lt;/title&gt;
+</span><span class='line'>    &lt;link href="http://spockwangs.github.io/blog/2013/06/10/cpp-idioms/"/&gt;
+</span><span class='line'>    &lt;updated&gt;2013-06-10T00:00:00+08:00&lt;/updated&gt;
+</span><span class='line'>    &lt;id&gt;http://spockwangs.github.io/blog/2013/06/10/cpp-idioms&lt;/id&gt;
+</span><span class='line'>    &lt;content type="html"&gt;&lt;![CDATA[&lt;h2 id="pimpl-idiom"&gt;Pimpl idiom&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;&lt;strong&gt;Declare the constructor and destructor in the header file and define them
+</span><span class='line'>  in the source file when using Pimpl idiom, even if they are empty.&lt;/strong&gt;
+</span><span class='line'>&lt;!--more--&gt;&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Consider the following code.</span></code></pre></td></tr></table></div></figure> c++
+// pimpl.h
+class Impl;    // forward declaration
+class Pimpl {
+public:
+Pimpl();</p>
+
+<p>// The destructor is not declared, so the compiler will generate one.</p>
+
+<p>private:
+boost::scoped_ptr<Impl> m_impl;
+};</Impl></p>
+
+<p>// pimpl.cc
+class Impl {
+ // …
+};</p>
+
+<dl>
+  <dt>Pimpl::Pimpl()</dt>
+  <dd>m_impl(new Impl)
+{}
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+<span class='line-number'>29</span>
+<span class='line-number'>30</span>
+<span class='line-number'>31</span>
+<span class='line-number'>32</span>
+<span class='line-number'>33</span>
+<span class='line-number'>34</span>
+<span class='line-number'>35</span>
+<span class='line-number'>36</span>
+<span class='line-number'>37</span>
+<span class='line-number'>38</span>
+<span class='line-number'>39</span>
+<span class='line-number'>40</span>
+<span class='line-number'>41</span>
+<span class='line-number'>42</span>
+<span class='line-number'>43</span>
+<span class='line-number'>44</span>
+<span class='line-number'>45</span>
+<span class='line-number'>46</span>
+<span class='line-number'>47</span>
+<span class='line-number'>48</span>
+<span class='line-number'>49</span>
+<span class='line-number'>50</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>If you do not declare the destructor the compiler will generate one in
+</span><span class='line'>every translation unit that includes &lt;code&gt;impl.h&lt;/code&gt;, which will call
+</span><span class='line'>the destructor of member variables, that is, the destructor
+</span><span class='line'>of &lt;code&gt;m_impl&lt;/code&gt; which requires the complete definition
+</span><span class='line'>of &lt;code&gt;Impl&lt;/code&gt;. But the whole purpose of Pimpl idiom is to hide the
+</span><span class='line'>definition of &lt;code&gt;Impl&lt;/code&gt;. To solve this problem you should declare
+</span><span class='line'>the destructor in the header file to prevent the compiler from generating
+</span><span class='line'>one, and define it in the source file. Then only the &lt;code&gt;impl.cc&lt;/code&gt; requires the
+</span><span class='line'>complete definition of &lt;code&gt;Impl&lt;/code&gt;. Other translation units just
+</span><span class='line'>call &lt;code&gt;Pimpl&lt;/code&gt;’s destructor as an external function, so they don’t
+</span><span class='line'>need to generate it.&lt;/dd&gt;
+</span><span class='line'>&lt;/dl&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="prefer-anonymous-namespace-functions-to-class-static-functions"&gt;Prefer anonymous namespace functions to class static functions.&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;When you are implementing a class’s interface, you may need some helper
+</span><span class='line'>functions which has no relation with the private (member or static)
+</span><span class='line'>data. You can either declare the helper functions as the private static
+</span><span class='line'>functions in the class header file, or as the anonymous namespace functions
+</span><span class='line'>in the class source file.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Since it does not need to access the private data, the helper function
+</span><span class='line'>should be kept out of the class definition to make them loosely
+</span><span class='line'>coupled. And it is the implementation’s details, which we don’t want the
+</span><span class='line'>client of the class see it. So if we can put it outside the header file, we
+</span><span class='line'>should do it. If we put it in the header file, every time the
+</span><span class='line'>implementation changes the client using this class has to be
+</span><span class='line'>re-compiled. So we should put the implementation details outside of the
+</span><span class='line'>class header file as much as possible.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="pass-read-only-arguments-by-const-reference-and-read-write-arguments-by-value"&gt;Pass read-only arguments by const reference, and read-write arguments by value&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;If the argument is intended to be read only in the function body, and&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;ol&gt;
+</span><span class='line'>  &lt;li&gt;if its size is bigger than the pointer type pass it by const-reference,&lt;/li&gt;
+</span><span class='line'>  &lt;li&gt;otherwise, pass it by value&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;to avoid unnecessary copy.  That means values of class objec type should be
+</span><span class='line'>passed by const-reference, and values of the small types like the basic
+</span><span class='line'>types should be passed by value.  If the smaller ones were passed by const
+</span><span class='line'>reference another pointer indirection cost would have been incurred in
+</span><span class='line'>addition to the pointer copying cost when reading their values.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;If the argument is intended to be modifed in the function body, it is
+</span><span class='line'>recommended to pass it by value instead of passing it by reference and
+</span><span class='line'>making a copy in the function body.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Consider the following code.</span></code></pre></td></tr></table></div></figure> c++
+std::vector<std::string> 
+sorted(std::vector<std::string> names)
+{
+std::sort(names);
+return names;
+}</std::string></std::string></p>
+
+<p>// names is an lvalue; a copy is required so we don’t modify names
+std::vector<std::string> sorted_names1 = sorted( names );</std::string></p>
+
+<p>// get_names() is an rvalue expression; we can omit the copy!
+std::vector<std::string> sorted_names2 = sorted( get_names() );
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>If the argument passed is an lvalue a copy is required.  But if the
+</span><span class='line'>argument is an rvalue the copy can be optimized out by the compiler.&lt;/std::string&gt;&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;See &lt;a href="http://cpp-next.com/archive/2009/08/want-speed-pass-by-value/"&gt;“Want Speed? Pass by
+</span><span class='line'>Value”&lt;/a&gt; for
+</span><span class='line'>more details.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;h2 id="dont-worry-about-returnning-by-value"&gt;Don’t worry about returnning by value&lt;/h2&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Many modern C++ compilers provide the Return Value Optimization to elide
+</span><span class='line'>the copy when returnning value.&lt;/p&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;Consider the following code.</span></code></pre></td></tr></table></div></figure> c++
+std::string getName()
+{
+std::string name;</p>
+
+<p>// do stuff to <code>name</code></p>
+
+<p>return name;
+}</p>
+
+<p>std::string s = getName();
+<code>
+Actually the signature of `getName()` is translated by the compiler to
+</code> c++
+void getName(std::string *p)
+{
+    // do stuff to <code>*p</code>
+    // not necessary to copy when returnning
+}
+```
+The caller allocates space for the return value on the stack, and pass the
+address of the space to the callee. Then the callee construct the return
+value directly in that space, which elimiates a copy from inside to
+outside. So we should no worry about the copy cost when returnning a big
+object from a function, and the signature is more satisfactory.</p>
+]]></content>
+  </entry>
+  
+</feed>

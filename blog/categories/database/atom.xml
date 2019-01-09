@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Database | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/database/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[用MySql实现事务型消息队列]]></title>
+    <link href="http://spockwangs.github.io/blog/2014/06/19/implement-transactional-queue-using-mysql/"/>
+    <updated>2014-06-19T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2014/06/19/implement-transactional-queue-using-mysql</id>
+    <content type="html"><![CDATA[<h2 id="introduction">Introduction</h2>
+
+<p>在离线数据处理系统中，为了解除模块之间的耦合关系，往往需要消息队列来实现模块之间的通信。对于离线系统来讲，消息队列要满足以下要求：</p>
+
+<ul>
+  <li>消息不能丢失，即使在系统失败的情况下。消息一旦被插入就一定会被至少处理一次（只被处理一次是最好的，但是实现起来有难度，所以只要求at-least-once semantic）；</li>
+  <li>FIFO顺序；</li>
+  <li>支持多生产者；</li>
+  <li>支持多消费者。每个消息只能被其中一个消费者处理。
+<!--more--></li>
+</ul>
+
+<h2 id="section">第一次尝试</h2>
+
+<p>为了满足事务特性，最简单的做法就是用MySql数据库来实现这个队列。为了支持FIFO顺序，可以用MySql的自增ID来排序，先进入的消息ID要小些。MySql数据库是支持并发操作的，这就自动支持了多生产者的情况。为了支持多消费者并且每个消息只被一个消费者处理，可以为每个消费者分配一个ID，当某个消息正在被消费者处理时，这个消费者就被认为是这个消息的owner。</p>
+
+<p>根据以上思路，构造表如下：</p>
+
+<pre><code>CREATE TABLE message_queue (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  
+  -- owner为NULL时表示消息未被处理；否则正在被某个消费者处理，其值就是这个消费者的ID
+  owner VARBINARY(255),
+  message VARBINARY(255) NOT NULL
+);
+</code></pre>
+
+<p>其中<code>message</code>是跟业务相关的消息数据，可以是一个字段也可以是多个字段。那么enqueue操作如下：</p>
+
+<pre><code>insert into message_queue (message) values ('a message');
+</code></pre>
+
+<p>dequeue操作有点复杂，分3步：</p>
+
+<ol>
+  <li>
+    <p>获取未被处理的消息。先占有这些消息，设置owner。为了加快速度减少访问数据库的频率，可以批量操作；</p>
+
+    <pre><code> update message_queue set owner='me' where owner is null limit 10;
+</code></pre>
+
+    <p>根据<a href="http://dev.mysql.com/doc/refman/5.0/en/mysql-affected-rows.html"><code>mysql_affected_rows()</code></a>的返回结果可以判断是否有未被处理的消息。若有，则取出消息：</p>
+
+    <pre><code> select message from message_queue where owner='me';
+</code></pre>
+
+    <p>注意，<code>update</code>操作是根据自增ID的顺序操作的，这就实现了FIFO。若把这两步合并成一个事务执行会造成对表的锁占用过多时间（多了一个请求响应来回时间）。</p>
+  </li>
+  <li>处理消息，此时表不会被锁住，其它消费者也可以获取消息；</li>
+  <li>
+    <p>处理完毕后从数据库中删除。对于处理出错的消息可以根据业务要求重试、忽略或者插入消息队列待下次再处理。</p>
+
+    <pre><code> delete from message_queue where owner='me'
+</code></pre>
+  </li>
+</ol>
+
+<p>上面没有考虑失败的情况。如果某个消费者在第1步和第2步之间失败的话，一个被占用的消息可能永远不会再被处理，即使此时有其它消费者还在运行，这就不满足at-least-once的要求了。</p>
+
+<h2 id="section-1">考虑消费者失败的情况</h2>
+
+<p>为了解决考虑消费者失败的情况，一个比较简单的方法就是对消费者进行监控（比如采用心跳），一旦失败就将其占有的但是还未删除的消息的<code>owner</code>设置成<code>null</code>。但是由谁来监控呢？容易想到的方法可能是单独建立一个服务对每个消费者进行监控，不过对于我们这里的简单问题不需要这么复杂，而且我本人不喜欢这种主从不对称的解决方案（毕竟谁来监控这个监控服务呢？）。我们可以让消费者相互监控。</p>
+
+<p>每当消费者取消息时，如果发现有消息虽然被占用但是却长时间没有处理完毕，那么就认为该消息的<code>owner</code>失败了，这个消息就可以被占用。为了判断消息处理是否超时，增加一个字段表示该消息被处理的时间戳：</p>
+
+<pre><code>CREATE TABLE message_queue (
+  id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  
+  -- owner为NULL时表示消息未被处理；否则正在被某个消费者处理，其值就是这个消费者的ID
+  owner VARBINARY(255),
+  
+  -- 最近一次被owner取出的时间
+  dequeued_time DATETIME,
+  message VARBINARY(255) NOT NULL
+);
+</code></pre>
+
+<p><code>dequeue</code>的第1步的update操作改为如下（假设消息处理的耗时不超过60s）：</p>
+
+<pre><code>update message_queue set owner='me',dequeued_time=NOW() 
+    where owner is null or dequeued_time &lt; SUBTIME(NOW(), SEC_TO_TIME(60)) limit 10;
+</code></pre>
+
+<p>这样即使消费者A在第1步和第2步之间失败了，消费者B还可以重新取出该消息重新处理。所以只要还有消费者在，消息至少会被处理一次。</p>
+
+<h2 id="section-2">如何实现只处理一次呢？</h2>
+
+<p>如果消费者在第2步和第3步之间失败的话，这个消息就会被再次取出来处理一次，这样就一共处理了2次。要保证每个消息只被处理一次，也就是要保证第2步和第3步是一个原子操作，要么都做，要么都不做。换句话说，第2步和第3步要合并成一个事务操作，但是这两步涉及到的是两个不同的实体（一个视业务逻辑而定，一个是MySql数据库），用事务处理的概念来讲就是两个不同的resource manager，必须采用分布式事务协议（比如两步提交协议）才能实现事务语义，这已远超出本文的范围了，不在这里赘述。</p>
+
+<h2 id="see-also">See also</h2>
+
+<ul>
+  <li><a href="https://blog.engineyard.com/2011/5-subtle-ways-youre-using-mysql-as-a-queue-and-why-itll-bite-you/">5-subtle-ways-youre-using-mysql-as-a-queue-and-why-itll-bite-you</a></li>
+  <li><a href="https://www.rabbitmq.com/">RabbitMQ</a>是一个消息队列解决方案，毕竟用数据库实现只是权宜之计</li>
+</ul>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[关于Mysql客户端、连接和服务器字符集]]></title>
+    <link href="http://spockwangs.github.io/blog/2013/03/14/mysql-character-set/"/>
+    <updated>2013-03-14T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2013/03/14/mysql-character-set</id>
+    <content type="html"><![CDATA[<h2 id="introduction">Introduction</h2>
+
+<p>Mysql在客户端与服务器交互时涉及到几个字符集和collation的转换问题：</p>
+
+<ul>
+  <li>
+    <p>客户端发给服务器的查询语句的字符集是什么？</p>
+
+    <p>客户端发给服务器的语句的字符集由系统变量<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_client">character_set_client</a>定义。
+<!--more--></p>
+  </li>
+  <li>
+    <p>服务器收到查询语句后会转换成什么字符集？</p>
+
+    <p>服务器将收到的查询语句从<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_client">character_set_client</a>转换为
+<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_connection">character_set_connection</a>，除非字符串常量显式指定了字符集。系统变量
+<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_collation_connection">collation_connection</a>定义了字符串常量的collation.</p>
+  </li>
+  <li>
+    <p>服务器返回给客户端的数据的字符集 是什么？</p>
+
+    <p>服务器返回给客户端的数据字符集由系统变量[character_set_results][character_set_results]定义。</p>
+  </li>
+  <li>
+    <p>服务器采用什么字符集存储数据？</p>
+
+    <p>Mysql中<a href="http://dev.mysql.com/doc/refman/5.5/en/string-types.html">字符串类型</a>有两种。对于非二进制字符串类型（<code>char</code>,
+<code>varchar</code>和<code>text</code>）采用建表时指定的字符集存储，对于二进制类型的数据（<code>binary</code>, <code>varbinary</code>, <code>blob</code>, <code>tinyblob</code>,
+<code>mediumblob</code>等类型的数据）采用<a href="http://dev.mysql.com/doc/refman/5.5/en/server-system-variables.html#sysvar_character_set_connection">character_set_connection</a>定义的字符集所映射的二进制值存储，注
+意这些类型本身是没有字符集的。</p>
+  </li>
+</ul>
+
+<p>上面这些系统变量均是<a href="http://dev.mysql.com/doc/refman/5.0/en/using-system-variables.html">会话变量</a>，改变它们的值不会影响其它客户端与服务器的连接。</p>
+
+<h2 id="section">如何设置字符集</h2>
+
+<p>我们通常用<code>set names</code>语句设置连接相关的字符集。
+<code>
+mysql&gt; set names 'charset_name' [collate 'collation_name']
+</code>
+等价于
+<code>
+mysql&gt; set character_set_client = 'charset_name'
+mysql&gt; set character_set_results = 'charset_name'
+mysql&gt; set character_set_connection = 'charset_name'
+</code>
+## 如何查看设置的字符集</p>
+
+<p>可以这样查看设置的系统变量
+<code>
+mysql&gt; show variables like 'character_set%';
++--------------------------+---------------------------------------+
+| Variable_name            | Value                                 |
++--------------------------+---------------------------------------+
+| character_set_client     | latin1                                | 
+| character_set_connection | latin1                                | 
+| character_set_database   | latin1                                | 
+| character_set_filesystem | binary                                | 
+| character_set_results    | latin1                                | 
+| character_set_server     | latin1                                | 
+| character_set_system     | utf8                                  | 
+| character_sets_dir       | /data/mysql_root/base/share/charsets/ | 
++--------------------------+---------------------------------------+
+8 rows in set (0.00 sec)
+</code>
+## References</p>
+
+<ul>
+  <li><a href="http://dev.mysql.com/doc/refman/5.5/en/charset-connection.html">关于连接字符集</a>.</li>
+  <li><a href="http://dev.mysql.com/doc/refman/5.0/en/using-system-variables.html">关于Mysql的两种系统变量</a>.</li>
+</ul>
+
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[MySql Help]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/05/16/mysql-help/"/>
+    <updated>2012-05-16T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/05/16/mysql-help</id>
+    <content type="html"><![CDATA[<h2 id="backup-and-recovery">Backup and Recovery</h2>
+
+<p>Use following command to backup an InnoDB table
+<code>
+$ mysqldump -u username -p password --default-character-set=utf8 
+    --single-transaction db_name table_name &gt; db_name-table_name-backup.sql
+</code>
+If you want to backup the whole database you just omit the table name. And
+then use the following command to recover the table.
+<code>
+$ mysql -u username -p password db_name-table_name-backup.sql
+</code></p>
+]]></content>
+  </entry>
+  
+</feed>

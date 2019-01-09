@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Tensorflow | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/tensorflow/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[编译独立的Tensorflow Serving库]]></title>
+    <link href="http://spockwangs.github.io/blog/2018/02/06/build-independent-tensorflow-serving-library/"/>
+    <updated>2018-02-06T15:51:48+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2018/02/06/build-independent-tensorflow-serving-library</id>
+    <content type="html"><![CDATA[<p>Tensorflow Serving的<a href="https://www.tensorflow.org/serving/setup?hl=zh-cn">官方文档</a>仅支持编译集成gRPC的模型预测服务，不方便开发者集成自己的框架中。本文将介绍一种方法编译独立的静态Tensorflow Serving库，开发者可直接调用Serving的API进行模型预测，方便集成至自己的服务中。
+<!--more--></p>
+
+<h2 id="section">准备编译环境</h2>
+
+<ol>
+  <li>安装Bazel</li>
+  <li>安装Python 2.7</li>
+</ol>
+
+<h2 id="tensorflow-serving">编译Tensorflow Serving</h2>
+
+<h3 id="tensorflow-serving-1">下载Tensorflow Serving源代码</h3>
+<p><code>
+$ git clone --recurse-submodules https://github.com/tensorflow/serving
+</code></p>
+
+<p>注意<code>--recurse-submodules</code>是为了下载子模块<code>tensorflow</code>和<code>tf_models</code>.
+以下命令都在源代码根目录下执行。</p>
+
+<h3 id="gpu">支持GPU</h3>
+
+<p>不需要支持GPU可跳过该步骤。</p>
+
+<p>支持GPU需要安装CUDA，而这需要一些先决条件，可参考<a href="http://docs.nvidia.com/cuda/cuda-installation-guide-linux/#axzz4RD7GVh1d">官方手册</a>.</p>
+
+<p>安装完后记录以下信息，配置Tensorflow时会用到：</p>
+
+<ul>
+  <li>CUDA的安装目录，一般是<code>/usr/local/cuda</code></li>
+  <li>CUDA的版本，查看文件<code>/usr/local/cuda/version.txt</code></li>
+  <li>cuDNN的版本
+<code>
+cat /usr/local/cuda/include/cudnn.h | grep CUDNN_MAJOR -A 2
+</code></li>
+</ul>
+
+<h3 id="tensorflow">配置Tensorflow</h3>
+
+<p><code>
+$ cd tensorflow
+$ ./configure
+$ cd ..
+</code>
+可参考https://www.tensorflow.org/install/install_sources?hl=zh-cn#configure_the_installation</p>
+
+<h3 id="tensorflow-serving-2">编译Tensorflow Serving</h3>
+
+<p><code>
+$ bazel clean
+$ bazel build -c opt --incompatible_load_argument_is_label=false \
+    --cxxopt=-march=native --copt=-march=native \
+    //tensorflow_serving/model_servers:tensorflow_model_server
+</code>
+选项<code>--incompatible_load_argument_is_label=false</code>是为了兼容bazel 0.9版的问题。</p>
+
+<h3 id="section-1">打包编译时生成的中间对象文件生成静态库</h3>
+
+<p><code>
+$ find -L bazel-out/k8-opt/ -name '*.o' | grep -v '/main\.o$\|\.grpc\.pb\.o$\|/curl/\|/grpc/\|/cloud/\|/hadoop/' | xargs -i ar qv libtensorflow_serving.a '{}'
+</code>
+注意：</p>
+
+<ul>
+  <li>要把上一步编译生成部分不需要的对象文件剔除掉。
+    <ul>
+      <li>main函数</li>
+      <li>curl, grpc, cloud, hadoop等不需要的模块</li>
+      <li>编译环境中已经有的模块（比如ssl, protobuf, snappy等）也可以剔除掉，减小库的尺寸</li>
+    </ul>
+  </li>
+  <li>ar是用选项<code>q</code>来添加对象文件，因为可能会有重名的对象文件。</li>
+</ul>
+
+<h2 id="section-2">训练并导出模型</h2>
+
+<p>以MNIST softmax模型为例，训练模型并导出到目录<code>models</code>.</p>
+
+<p><code>
+$ python2 serving/tensorflow_serving/example/mnist_saved_model.py models
+</code></p>
+
+<h2 id="section-3">编写示例代码加载模型进行预测</h2>
+
+<p>``` c++
+#include <iostream>
+#include <fstream>
+#include &lt;arpa/inet.h&gt;
+#include "tensorflow_serving/core/availability_preserving_policy.h"
+#include "tensorflow_serving/model_servers/platform_config_util.h"
+#include "tensorflow_serving/model_servers/server_core.h"
+#include "tensorflow_serving/servables/tensorflow/predict_impl.h"</fstream></iostream></p>
+
+<p>using namespace std;
+using namespace tensorflow::serving;</p>
+
+<p>class DataSet {
+public:
+    DataSet()
+    {}</p>
+
+<pre><code>void LoadDataFromDir(const std::string&amp; path)
+{
+    const char* x_train_file = "train-images-idx3-ubyte";
+    const char* y_train_file = "train-labels-idx1-ubyte";
+    const char* x_test_file = "t10k-images-idx3-ubyte";
+    const char* y_test_file = "t10k-labels-idx1-ubyte";
+    m_x_train = ExtractImages(path + "/" + x_train_file);
+    m_y_train = ExtractLabels(path + "/" + y_train_file);
+    m_x_test = ExtractImages(path + "/" + x_test_file);
+    m_y_test = ExtractLabels(path + "/" + y_test_file);
+}
+    
+vector&lt;double&gt;&amp; x_train()
+{
+    return m_x_train;
+}
+
+vector&lt;int&gt;&amp; y_train()
+{
+    return m_y_train;
+}
+
+vector&lt;double&gt;&amp; x_test()
+{
+    return m_x_test;
+}
+
+vector&lt;int&gt;&amp; y_test()
+{
+    return m_y_test;
+}
+</code></pre>
+
+<p>private:
+    uint32_t ReadUint32(ifstream&amp; is)
+    {
+        uint32_t data = 0;
+        auto read_count = is.readsome(reinterpret_cast&lt;char*&gt;(&amp;data), 4);
+        if (read_count != 4) {
+            throw logic_error(“can’t read 4 bytes”);
+        }
+        return ntohl(data);
+    }</p>
+
+<pre><code>uint8_t ReadUint8(ifstream&amp; is)
+{
+    uint8_t data = 0;
+    auto read_count = is.readsome(reinterpret_cast&lt;char*&gt;(&amp;data), 1);
+    if (read_count != 1) {
+        throw logic_error("can't read 1 byte");
+    }
+    return data;
+}
+
+vector&lt;double&gt; ExtractImages(const string&amp; file)
+{
+    ifstream is(file);
+    if (!is) {
+        throw logic_error("can't open file: " + file);
+    }
+    uint32_t magic = ReadUint32(is);
+    if (magic != 2051) {
+        throw logic_error("bad magic: " + to_string(magic));
+    }
+    uint32_t num = ReadUint32(is);
+    uint32_t rows = ReadUint32(is);
+    uint32_t cols = ReadUint32(is);
+    vector&lt;double&gt; images;
+    for (size_t i = 0; i &lt; num*rows*cols; ++i) {
+        uint8_t byte = ReadUint8(is);
+        images.push_back(static_cast&lt;double&gt;(byte)/255.0);
+    }
+    return images;
+}
+
+vector&lt;int&gt; ExtractLabels(const string&amp; file)
+{
+    ifstream is(file);
+    if (!is) {
+        throw logic_error("can't open file: " + file);
+    }
+    uint32_t magic = ReadUint32(is);
+    if (magic != 2049) {
+        throw logic_error("bad magic: " + to_string(magic));
+    }
+    uint32_t num = ReadUint32(is);
+    vector&lt;int&gt; labels;
+    for (size_t i = 0; i &lt; num; ++i) {
+        uint8_t byte = ReadUint8(is);
+        labels.push_back(byte);
+    }
+    return labels;
+}
+
+std::vector&lt;double&gt; m_x_train;
+std::vector&lt;int&gt; m_y_train;
+std::vector&lt;double&gt; m_x_test;
+std::vector&lt;int&gt; m_y_test; };
+</code></pre>
+
+<p>int GetPredictValue(const PredictResponse&amp; resp)
+{
+    int predicted = 0;
+    for (const auto&amp; p : resp.outputs()) {
+        if (p.first == “scores”) {
+            float max = 0;
+            for (size_t j = 0; j &lt; p.second.float_val_size(); ++j) {
+                if (p.second.float_val(j) &gt; max) {
+                    max = p.second.float_val(j);
+                    predicted = j;
+                }
+            }
+        }
+    }
+    return predicted;
+}</p>
+
+<p>int main()
+{
+    // 加载测试数据。
+    DataSet data_set;
+    data_set.LoadDataFromDir(“mnist_data”);</p>
+
+<pre><code>// 设置Serving选项。
+ServerCore::Options options;
+auto config = options.model_server_config.mutable_model_config_list()-&gt;add_config();
+// 设置模型名称，请求模型预测时必须与此一致，见下面。
+config-&gt;set_name("mnist");
+// 设置模型的路径。注意：必须是绝对路径。
+config-&gt;set_base_path("/home/qspace/data/spockwang/models");
+// 设置模型平台。对Tensorflow训练的模型来讲必须是"tensorflow".
+config-&gt;set_model_platform("tensorflow");
+
+options.aspired_version_policy = std::unique_ptr&lt;AspiredVersionPolicy&gt;(new AvailabilityPreservingPolicy);
+
+// 运行平台配置。
+SessionBundleConfig session_bundle_config;
+session_bundle_config.mutable_session_config()-&gt;set_intra_op_parallelism_threads(1);
+session_bundle_config.mutable_session_config()-&gt;set_inter_op_parallelism_threads(0);
+options.platform_config_map = CreateTensorFlowPlatformConfigMap(session_bundle_config, true);
+
+std::unique_ptr&lt;ServerCore&gt; core;
+auto status = ServerCore::Create(std::move(options), &amp;core);
+if (!status.ok()) {
+    cerr &lt;&lt; "error: " &lt;&lt; status.ToString() &lt;&lt; endl;
+    return 1;
+}
+std::unique_ptr&lt;TensorflowPredictor&gt; predictor(new TensorflowPredictor(true));
+
+// 遍历测试数据进行预测，然后计算预测精度。
+int total_cnt = 0;
+int success_cnt = 0;
+int n = data_set.x_test().size()/784;
+for (int i = 0; i &lt; n; ++i) {
+    cout &lt;&lt; "#" &lt;&lt; i &lt;&lt; "/" &lt;&lt; n &lt;&lt; endl;
+    vector&lt;double&gt; x = vector&lt;double&gt;(data_set.x_test().begin()+784*i,
+                                      data_set.x_test().begin()+784*(i+1));
+    int y = data_set.y_test()[i];
+
+    PredictRequest req;
+    auto model_spec = req.mutable_model_spec();
+    // 与加载模型时设置的名字保持一致，见上面。
+    model_spec-&gt;set_name("mnist");
+    // 与保存模型时设置的签名保持一致，见mnist_saved_model.py
+    model_spec-&gt;set_signature_name("predict_images");
+
+    // 构造输入特征。
+    auto inputs = req.mutable_inputs();
+    auto&amp; tensor = (*inputs)["images"];
+    tensor.set_dtype(tensorflow::DataType::DT_FLOAT);
+    for (auto i : x) {
+        tensor.add_float_val(i);
+    }
+    tensor.mutable_tensor_shape()-&gt;add_dim()-&gt;set_size(1);
+    tensor.mutable_tensor_shape()-&gt;add_dim()-&gt;set_size(x.size());
+    
+    // 计算预测输出。
+    PredictResponse resp;
+    auto status = predictor-&gt;Predict(tensorflow::RunOptions(), core.get(), req, &amp;resp);
+    if (!status.ok()) {
+        cerr &lt;&lt; status.ToString() &lt;&lt; endl;
+        return 1;
+    }
+    ++total_cnt;
+    int predicted = GetPredictValue(resp);
+    if (y == predicted) {
+        ++success_cnt;
+    }
+}
+
+double accuracy = static_cast&lt;double&gt;(success_cnt)/total_cnt;
+cout &lt;&lt; "Accuracy: " &lt;&lt; accuracy &lt;&lt; endl;
+return 0; } ```
+</code></pre>
+
+<p>编译代码：
+<code>
+$ g++ -o mnist_serving mnist_serving.cpp -Wl,-whole-archive libtensorflow_serving.a -Wl,-no-whole-archive -I serving -I serving/tensorflow -I serving/bazel-out/k8-opt/genfiles/external/org_tensorflow/ -I serving/bazel-serving/external/nsync/public/ -I serving/bazel-serving/external/protobuf_archive/src/ -I serving/bazel-out/k8-opt/genfiles/ -std=c++11 -ldl -lpthread
+</code>
+注意：由于Tensorflow采用注册机制来实现反射，所以必须使用链接选项<code>-whole-archive</code>强制链接整个静态库。</p>
+
+<p>下载MNIST数据到目录<code>mnist_data</code>并解压，然后运行查看预测结果。
+<code>
+$ ls mnist_data
+t10k-images-idx3-ubyte  t10k-labels-idx1-ubyte  train-images-idx3-ubyte  train-labels-idx1-ubyte
+$ ./mnist_serving
+...
+Accuracy: 0.9092
+2018-02-07 11:49:34.222079: I tensorflow_serving/core/basic_manager.cc:253] Unload all remaining servables in the manager.
+2018-02-07 11:49:34.222122: I tensorflow_serving/core/loader_harness.cc:137] Quiescing servable version {name: mnist version: 1}
+2018-02-07 11:49:34.222135: I tensorflow_serving/core/loader_harness.cc:144] Done quiescing servable version {name: mnist version: 1}
+2018-02-07 11:49:34.222147: I tensorflow_serving/core/loader_harness.cc:119] Unloading servable version {name: mnist version: 1}
+2018-02-07 11:49:34.223047: I ./tensorflow_serving/core/simple_loader.h:294] Calling MallocExtension_ReleaseToSystem() after servable unload with 61522
+2018-02-07 11:49:34.223068: I tensorflow_serving/core/loader_harness.cc:127] Done unloading servable version {name: mnist version: 1}
+</code></p>
+
+]]></content>
+  </entry>
+  
+</feed>

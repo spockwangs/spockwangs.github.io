@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Algorithm | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/algorithm/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[随机采样]]></title>
+    <link href="http://spockwangs.github.io/blog/2011/12/12/random-sample/"/>
+    <updated>2011-12-12T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2011/12/12/random-sample</id>
+    <content type="html"><![CDATA[<h2 id="section">问题描述</h2>
+
+<p>从一个预先不知道其大小的集合中随机选出<code>K</code>个数字。
+<!--more--></p>
+
+<h2 id="section-1">算法</h2>
+
+<p><em>Input:</em> <code>K</code>，和一系列数字。</p>
+
+<p><em>Output:</em> 随机选出的<code>K</code>个数字。</p>
+
+<pre><code>R := [ ];     # 初始化为一个空数组。
+N := 0;       # 已经考虑的数字的个数。
+for next number i
+begin
+    N := N + 1;
+    if size(R) &amp;lt; K
+    then
+        R := [ R, i ];      # 将数字i添加到数组R中。
+    else
+        j := randint(0, N);
+        if j &amp;lt; K
+        then
+            R[j] = i;
+        end
+    end
+end
+</code></pre>
+<p>其中<code>randint(0, N)</code>等概率地返回<code>[0, N)</code>中的一个整数。结束后<code>R</code>中的<code>K</code>个数字就是我们需要的。</p>
+]]></content>
+  </entry>
+  
+</feed>

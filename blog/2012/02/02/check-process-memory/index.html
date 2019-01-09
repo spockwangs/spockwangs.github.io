@@ -1,0 +1,449 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>查看进程的内存使用情况 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="用ps命令查看进程的内存 ps命令是Linux下常见的查看进程状况的程序，它有几个字段可以用来查看进程内存使用情况：sz，rss，vsz。分别说明如下： sz：进程映像所占用的物理页面数量，也就是以物理页面为单位表示的虚拟内存大小； rss：进程当前所占用的物理内存大小，单位为kB； vsz： &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/02/02/check-process-memory/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">查看进程的内存使用情况</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-02T00:00:00+08:00'><span class='date'>2012-02-02</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="ps">用ps命令查看进程的内存</h2>
+
+<p><code>ps</code>命令是Linux下常见的查看进程状况的程序，它有几个字段可以用来查看进程内存使用情况：sz，rss，vsz。分别说明如下：</p>
+
+<ul>
+  <li>sz：进程映像所占用的物理页面数量，也就是以物理页面为单位表示的虚拟内存大小；</li>
+  <li>rss：进程当前所占用的物理内存大小，单位为kB；</li>
+  <li>vsz：进程的虚拟内存大小，单位为kB，它等于sz乘于物理页面大小（x86平台通常为4kB）。
+<!--more--></li>
+</ul>
+
+<p>假如我要查看程序<code>a.out</code>的内存使用情况，操作如下：</p>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">$ ./a.out &amp;
+</span><span class="line">[1] 10069
+</span><span class="line">$ ps -O sz,rsz,vsz
+</span><span class="line">PID    SZ   RSS    VSZ S TTY          TIME COMMAND
+</span><span class="line"> 6793  1545  3648   6180 S pts/2    00:00:00 /bin/bash
+</span><span class="line">10069   404   304   1616 S pts/2    00:00:00 ./a.out
+</span><span class="line">10070   626   876   2504 R pts/2    00:00:00 ps -O sz,rss,vsz</span></code></pre></td></tr></table></div></figure>
+<p>上面<code>ps</code>命令的输出的第3行就是<code>./a.out</code>自行后的相关情况。我们可以看出，它的虚拟
+内存大小为1616kB，当前占用的物理内存为304kB（其它数据在磁盘上或交换分区），
+虚拟内存占用404个物理页面。由于我的机器的物理页面大小为4kB，可以验证404 x
+4kB等于1616kB。</p>
+
+<h2 id="proc">用/proc文件系统查看进程的内存使用情况</h2>
+
+<p><code>ps</code>命令的输出关于内存的情况不是很详细，尤其是进程所使用的内存中有很大一部分
+是共享库函数使用的，因此通过<code>ps</code>命令的输出看不到进程自己使用了多少内
+存。为了查看更详细的信息，可以借助于<code>/proc</code>文件系统。这个文件系统并存
+在于磁盘上，但是可以象操作其它普通文件一样操作它。它是Linux提供给用户查看进
+程相关信息的接口。在<code>/proc</code>下有2个文件和进程内存有关：
+<code>/proc/&lt;pid&gt;/status</code>和<code>/proc/&lt;pid&gt;/smaps</code>。</p>
+
+<p>通过<code>/proc/&lt;pid&gt;/status</code>可以查看进程的内存使用情况，包括虚拟内存大小
+（VmSize），物理内存大小（VmRSS），数据段大小（VmData），栈的大小（VmStk），
+代码段的大小（VmExe），共享库的代码段大小（VmLib）等等。</p>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+<span class="line-number">22</span>
+<span class="line-number">23</span>
+<span class="line-number">24</span>
+<span class="line-number">25</span>
+<span class="line-number">26</span>
+<span class="line-number">27</span>
+<span class="line-number">28</span>
+<span class="line-number">29</span>
+<span class="line-number">30</span>
+<span class="line-number">31</span>
+<span class="line-number">32</span>
+<span class="line-number">33</span>
+<span class="line-number">34</span>
+<span class="line-number">35</span>
+<span class="line-number">36</span>
+<span class="line-number">37</span>
+<span class="line-number">38</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">$ cat /proc/10069/status
+</span><span class="line">Name:   a.out
+</span><span class="line">State:  S (sleeping)
+</span><span class="line">Tgid:   10069
+</span><span class="line">Pid:    10069
+</span><span class="line">PPid:   6793
+</span><span class="line">TracerPid:      0
+</span><span class="line">Uid:    1001    1001    1001    1001
+</span><span class="line">Gid:    1001    1001    1001    1001
+</span><span class="line">FDSize: 256
+</span><span class="line">Groups: 1000 1001 
+</span><span class="line">VmPeak:     1692 kB
+</span><span class="line">VmSize:     1616 kB
+</span><span class="line">VmLck:         0 kB
+</span><span class="line">VmHWM:       304 kB
+</span><span class="line">VmRSS:       304 kB
+</span><span class="line">VmData:       28 kB
+</span><span class="line">VmStk:        88 kB
+</span><span class="line">VmExe:         4 kB
+</span><span class="line">VmLib:      1464 kB
+</span><span class="line">VmPTE:        20 kB
+</span><span class="line">Threads:        1
+</span><span class="line">SigQ:   0/16382
+</span><span class="line">SigPnd: 0000000000000000
+</span><span class="line">ShdPnd: 0000000000000000
+</span><span class="line">SigBlk: 0000000000000000
+</span><span class="line">SigIgn: 0000000000000000
+</span><span class="line">SigCgt: 0000000000000000
+</span><span class="line">CapInh: 0000000000000000
+</span><span class="line">CapPrm: 0000000000000000
+</span><span class="line">CapEff: 0000000000000000
+</span><span class="line">CapBnd: ffffffffffffffff
+</span><span class="line">Cpus_allowed:   f
+</span><span class="line">Cpus_allowed_list:      0-3
+</span><span class="line">Mems_allowed:   1
+</span><span class="line">Mems_allowed_list:      0
+</span><span class="line">voluntary_ctxt_switches:        1
+</span><span class="line">nonvoluntary_ctxt_switches:     1</span></code></pre></td></tr></table></div></figure>
+<p>注意，VmData，VmStk，VmExe和VmLib之和并不等于VmSize。这是因为共享库函数的数
+据段没有计算进去（VmData仅包含a.out程序的数据段，不包括共享库函数的数据段，
+也不包括通过mmap映射的区域。VmLib仅包括共享库的代码段，不包括共享库的数据
+段）。</p>
+
+<p>通过<code>/proc/&lt;pid&gt;/smaps</code>可以查看进程整个虚拟地址空间的映射情况，它的输
+出从低地址到高地址按顺序输出每一个映射区域的相关信息，如下所示：</p>
+<figure class="code"><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+<span class="line-number">21</span>
+<span class="line-number">22</span>
+<span class="line-number">23</span>
+<span class="line-number">24</span>
+<span class="line-number">25</span>
+<span class="line-number">26</span>
+<span class="line-number">27</span>
+</pre></td><td class="code"><pre><code class=""><span class="line">$ cat /proc/10069/smaps
+</span><span class="line">00110000-00263000 r-xp 00000000 08:07 128311     /lib/tls/i686/cmov/libc-2.11.1.so
+</span><span class="line">Size:               1356 kB
+</span><span class="line">Rss:                 148 kB
+</span><span class="line">Pss:                   8 kB
+</span><span class="line">Shared_Clean:        148 kB
+</span><span class="line">Shared_Dirty:          0 kB
+</span><span class="line">Private_Clean:         0 kB
+</span><span class="line">Private_Dirty:         0 kB
+</span><span class="line">Referenced:          148 kB
+</span><span class="line">Swap:                  0 kB
+</span><span class="line">KernelPageSize:        4 kB
+</span><span class="line">MMUPageSize:           4 kB
+</span><span class="line">......
+</span><span class="line">......
+</span><span class="line">bfd7f000-bfd94000 rw-p 00000000 00:00 0          [stack]
+</span><span class="line">Size:                 88 kB
+</span><span class="line">Rss:                   8 kB
+</span><span class="line">Pss:                   8 kB
+</span><span class="line">Shared_Clean:          0 kB
+</span><span class="line">Shared_Dirty:          0 kB
+</span><span class="line">Private_Clean:         0 kB
+</span><span class="line">Private_Dirty:         8 kB
+</span><span class="line">Referenced:            8 kB
+</span><span class="line">Swap:                  0 kB
+</span><span class="line">KernelPageSize:        4 kB
+</span><span class="line">MMUPageSize:           4 kB</span></code></pre></td></tr></table></div></figure>
+<p>注意：<code>rwxp</code>中，<code>p</code>表示私有映射（采用Copy-On-Write技术）。<code>Size</code>字段就是该区域的大小。</p>
+
+<h2 id="section">参考文献</h2>
+
+<ul>
+  <li><code>ps(1)</code>的<code>-O</code>选项。</li>
+  <li><code>proc(5)</code>的<code>/proc/[pid]/status</code>和<code>/proc/[pid]/smaps</code>条目。</li>
+</ul>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-02T00:00:00+08:00'><span class='date'>2012-02-02</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/computer-system/'>computer system</a>, <a class='category' href='/blog/categories/operating-system/'>operating system</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/02/02/bit-tricks/" title="Previous Post: 比特操纵技巧">&laquo; 比特操纵技巧</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/02/02/configure-subversion/" title="Next Post: 配置Subversion">配置Subversion &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

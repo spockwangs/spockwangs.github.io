@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Administration | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/administration/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[在Windows上配置Emacs 23]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/02/02/emacs-config-in-windows/"/>
+    <updated>2012-02-02T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/02/02/emacs-config-in-windows</id>
+    <content type="html"><![CDATA[<h2 id="emacs">Emacs的配置文件</h2>
+
+<p>在Windows下，Emacs的配置文件存放在被Emacs称为HOME的目录下。默认情况下该目录
+是<code>C:/Users/&lt;login name&gt;/AppData/Roaming/</code>（Windows 7）。这个目录可以通
+过环境变量<code>HOME</code>来设置。
+<!--more--></p>
+
+<h2 id="emacs-1">启用Emacs的服务器模式</h2>
+
+<p>Emacs有一个服务器模式，就是先启动Emacs服务器，然后每当编辑文件时启动Emacs客
+户端。这个客户端会与这个服务器联系，让其来完成各种编辑命令。这样就不用重新再
+启动另一个Emacs实例来编辑文件，不管编辑多少个文件都只要一个Emacs实例（即进程）
+就可以了。</p>
+
+<p>为了达到这个目的，需要做以下几步设置：</p>
+
+<ol>
+  <li>在<code>~/.emacs</code>中加入<code>(server-start)</code>. 这样Emacs第一次启动时会启动服务器。</li>
+  <li>设置环境变量<code>EMACS_SERVER_FILE</code>为<code>%HOME%/.emacs.d/server/server</code>。这是
+Emacs客户端与服务器用来通信的。每当服务器启动时都会建立这个文件，退出时删除
+这个文件。这个环境变量告诉Emacs客户端服务器建立的文件在哪里。</li>
+</ol>
+
+<h2 id="emacs-2">将Emacs加入右键菜单</h2>
+
+<p>将Emacs加入资源管理器的右键菜单可以大大方便用Emacs编辑文件。而这个可以通过编辑注册表来实现。</p>
+
+<p>在DOS命令行中用regedit命令打开注册表编辑器。在“HKEY_CLASSES_ROOT/*/Shell”下
+新建一名为“Edit with Emacs”（可自由命名）的项，然后在这个项下再建一个名叫
+“command”（必须如此命名）的项，将其值设为
+<code>&lt;emacs-install-dir&gt;/bin/emacsclientw.exe
+-a &lt;emacs-install-dir&gt;/bin/runemacs.exe -n %1</code>。这样就可以了。其中
+<code>&lt;emacs-install-dir&gt;</code>表示Emacs的安装目录。emacsclientw.exe是Emacs客户端，
+<code>-a</code>和<code>-n</code>都是它的选项参数，可通过<code>emacsclientw.exe –help</code>查看。<code>-a</code>表示若
+Emacs服务器没有启动则启动该选项的值所表示的编辑器。</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[配置Subversion]]></title>
+    <link href="http://spockwangs.github.io/blog/2012/02/02/configure-subversion/"/>
+    <updated>2012-02-02T00:00:00+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2012/02/02/configure-subversion</id>
+    <content type="html"><![CDATA[<h2 id="subversionxinetd">配置Subversion服务器使用xinetd启动</h2>
+<!--more-->
+
+<ol>
+  <li>建立/etc/xinetd.d/svn，内容如下：
+<figure class='code'><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class='line-number'>1</span>
+<span class='line-number'>2</span>
+<span class='line-number'>3</span>
+<span class='line-number'>4</span>
+<span class='line-number'>5</span>
+<span class='line-number'>6</span>
+<span class='line-number'>7</span>
+<span class='line-number'>8</span>
+<span class='line-number'>9</span>
+<span class='line-number'>10</span>
+<span class='line-number'>11</span>
+<span class='line-number'>12</span>
+<span class='line-number'>13</span>
+<span class='line-number'>14</span>
+<span class='line-number'>15</span>
+<span class='line-number'>16</span>
+<span class='line-number'>17</span>
+<span class='line-number'>18</span>
+<span class='line-number'>19</span>
+<span class='line-number'>20</span>
+<span class='line-number'>21</span>
+<span class='line-number'>22</span>
+<span class='line-number'>23</span>
+<span class='line-number'>24</span>
+<span class='line-number'>25</span>
+<span class='line-number'>26</span>
+<span class='line-number'>27</span>
+<span class='line-number'>28</span>
+</pre></td><td class='code'><pre><code class=''><span class='line'>service svn
+</span><span class='line'>{
+</span><span class='line'>disable = no
+</span><span class='line'>id = svn-stream
+</span><span class='line'>socket_type = stream
+</span><span class='line'>protocol = tcp
+</span><span class='line'>user = xxx   # 运行svnserve的用户名
+</span><span class='line'>wait = no
+</span><span class='line'>server = /usr/bin/svnserve
+</span><span class='line'>server_args = -i -r /path/to/repository
+</span><span class='line'>}&lt;/li&gt;
+</span><span class='line'>&lt;/ol&gt;
+</span><span class='line'>
+</span><span class='line'>&lt;p&gt;service svn
+</span><span class='line'>{
+</span><span class='line'>    disable = no
+</span><span class='line'>    id = svn-dgram
+</span><span class='line'>    socket_type = dgram
+</span><span class='line'>    protocol = udp
+</span><span class='line'>    user = xxx   # 运行svnserve的用户名
+</span><span class='line'>    wait = yes
+</span><span class='line'>    server = /usr/bin/svnserve
+</span><span class='line'>    server_args = -i -r /path/to/repository
+</span><span class='line'>}
+</span><span class='line'>&lt;code&gt;
+</span><span class='line'>2.  重启xinetd服务器。
+</span><span class='line'>&lt;/code&gt;
+</span><span class='line'>$ sudo invoke-rc.d xinetd restart</span></code></pre></td></tr></table></div></figure>
+接下来我们就可以采用svn协议访版本库中的数据了。</p>
+
+<h2 id="svn">建立SVN仓库</h2>
+
+<ol>
+  <li>确定仓库的地址，假设为<code>/home/svn</code>.</li>
+  <li>创建一个仓库，名为<code>repos</code>:
+<code>
+$ svnadmin create /home/svn/repos
+</code></li>
+  <li>配置仓库访问控制。编辑<code>/home/svn/repos/conf/svnserve</code>：
+<code>
+[general]
+# ...
+anon-access = read
+auth-access = write
+# ...
+password-db = passwd
+...
+</code>
+在<code>[general]</code>下有几个属性控制访问权限。<code>anon-access</code>控制匿名用户的访问权限，
+<code>auth-access</code>控制授权用户的访问权限，它们可以为<code>read</code>, <code>write</code>, <code>none</code>。权限
+控制有几种方式，最简单的一种是通过密码文件来授权。密码文件的位置由
+<code>password-db</code>指定,一般就放在与<code>svnserve</code>同一目录下，叫<code>passwd</code>，格式如下：
+<code>
+    name = password
+</code>
+等号左边是用户名，右边是密码。如果不允许匿名操作，则需要输入密码。</li>
+  <li>导入需要版本控制的数据。假设数据在<code>tree</code>目录下，要导入到刚刚建立的仓库中：
+<code>
+$ svn import tree svn://svnhost/repos/project
+</code></li>
+</ol>
+]]></content>
+  </entry>
+  
+</feed>

@@ -1,0 +1,324 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>FTP的主动和被动模式 - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="FTP是仅基于TCP的服务，不支持UDP。与众不同的是FTP使用2个端口，一个数据端口和
+一个命令端口（也可叫做控制端口）。通常来说这两个端口是21（命令端口）和20（数
+据端口）。但FTP工作方式的不同，数据端口并不总是20。这就是主动与被动FTP的最大
+不同之处。 主动FTP &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/02/03/ftp-active-and-passive-mode/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">FTP的主动和被动模式</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><p>FTP是仅基于TCP的服务，不支持UDP。与众不同的是FTP使用2个端口，一个数据端口和
+一个命令端口（也可叫做控制端口）。通常来说这两个端口是21（命令端口）和20（数
+据端口）。但FTP工作方式的不同，数据端口并不总是20。这就是主动与被动FTP的最大
+不同之处。
+<!--more--></p>
+
+<h2 id="ftp">主动FTP</h2>
+
+<p>主动方式的FTP是这样的：客户端从一个任意的非特权端口N（N &gt; 1024）连接到FTP服
+务器的命令端口，也就是21端口。然后客户端开始监听端口N+1，并发送FTP命令“PORT
+N+1”到FTP服务器。接着服务器会从它自己的数据端口（20）连接到客户端指定的数据
+端口（N+1）。</p>
+
+<p>针对FTP服务器前面的防火墙来说，必须允许以下通讯才能支持主动方式FTP：</p>
+
+<ol>
+  <li>任何大于1024的端口到FTP服务器的21端口。（客户端初始化的连接）；</li>
+  <li>FTP服务器的21端口到大于1024的端口。 （服务器响应客户端的控制端口）；</li>
+  <li>FTP服务器的20端口到大于1024的端口。（服务器端初始化数据连接到客户端的数据端口）；</li>
+  <li>大于1024的端口到FTP服务器的20端口（客户端发送ACK响应到服务器的数据端口）。</li>
+</ol>
+
+<h2 id="ftp-1">被动FTP</h2>
+
+<p>为了解决服务器发起到客户的连接的问题，人们开发了一种不同的FTP连接方式。这就
+是所谓的被动方式，或者叫做PASSIVE，当客户端通知服务器它处于被动模式时才启用。
+在被动方式FTP中，命令连接和数据连接都由客户端发起，这样就可以解决从服务器到
+客户端的数据端口的入方向连接被防火墙过滤掉的问题。当开启一个FTP连接时，客户
+端打开两个任意的非特权本地端口（N &gt; 1024和N+1）。第一个端口连接服务器的
+21端口，但与主动方式的FTP不同，客户端不会提交PORT命令并允许服务器来回连它的
+数据端口，而是提交PASV命令。这样做的结果是服务器会开启一个任意的非特权端口
+（P &gt; 1024），并发送PORT P命令给</p>
+
+<p>客户端。然后客户端发起从本地端口N+1到服务器的端口P的连接用来传送数据。对于服务器端的防火墙来说，必须允许下面的通讯才能支持被动方式的FTP:</p>
+
+<ol>
+  <li>从任何大于1024的端口到服务器的21端口（客户端初始化的连接） ；</li>
+  <li>服务器的21 端口到任何大于1024的端口（服务器响应到客户端的控制端口的连接） ；</li>
+  <li>从任何大于1024端口到服务器的大于1024端口（客户端初始化数据连接到服务器指定的任意端口）；</li>
+  <li>服务器的大于1024端口到远程的大于1024的端口（服务器发送ACK响应和数据到客户端的数据端口）。</li>
+</ol>
+
+<p>以上关于主动和被动FTP的解释，可以简单概括为以下两点：</p>
+
+<ol>
+  <li>主动FTP:<br />
+命令连接：客户端 &gt; 1024端口 -&gt; 服务器 21端口<br />
+数据连接：客户端 &gt; 1024端口 -&gt; 服务器 20端口</li>
+  <li>被动FTP：<br />
+命令连接：客户端 &gt;1024端口 -&gt; 服务器 21端口<br />
+数据连接：客户端 &gt;1024端口 -&gt; 服务器 &gt; 1024端口</li>
+</ol>
+
+<h2 id="ftp-2">主动与被动FTP优缺点</h2>
+
+<p>主动FTP对FTP服务器的管理有利，但对客户端的管理不利。因为 FTP服务器企图与客户
+端的高位随机端口建立连接，而这个端口很有可能被客户端的防火墙阻塞掉。被动FTP
+对FTP客户端的管理有利，但对服务器端的管理不利。因为客户端要与服务器端建立两
+个连接，其中一个连到一个高位随机端口，而这个端口很有可能被服务器端的防火墙阻
+塞掉。</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-02-03T00:00:00+08:00'><span class='date'>2012-02-03</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/computer-network/'>computer network</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/02/03/epigrams-on-programming/" title="Previous Post: Epigrams on Programming">&laquo; Epigrams on Programming</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/02/03/notes-on-tcp/" title="Next Post: TCP协议浅析">TCP协议浅析 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

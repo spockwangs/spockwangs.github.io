@@ -1,0 +1,434 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>C++ Idioms - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Pimpl idiom Declare the constructor and destructor in the header file and define them in the source file when using Pimpl idiom, even if they are &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2013/06/10/cpp-idioms/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">C++ Idioms</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2013-06-10T00:00:00+08:00'><span class='date'>2013-06-10</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="pimpl-idiom">Pimpl idiom</h2>
+
+<p><strong>Declare the constructor and destructor in the header file and define them
+  in the source file when using Pimpl idiom, even if they are empty.</strong>
+<!--more--></p>
+
+<p>Consider the following code.</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+<span class="line-number">13</span>
+<span class="line-number">14</span>
+<span class="line-number">15</span>
+<span class="line-number">16</span>
+<span class="line-number">17</span>
+<span class="line-number">18</span>
+<span class="line-number">19</span>
+<span class="line-number">20</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="c1">// pimpl.h</span>
+</span><span class="line"><span class="k">class</span> <span class="nc">Impl</span><span class="p">;</span>    <span class="c1">// forward declaration</span>
+</span><span class="line"><span class="k">class</span> <span class="nc">Pimpl</span> <span class="p">{</span>
+</span><span class="line"><span class="k">public</span><span class="o">:</span>
+</span><span class="line"><span class="n">Pimpl</span><span class="p">();</span>
+</span><span class="line">
+</span><span class="line"><span class="c1">// The destructor is not declared, so the compiler will generate one.</span>
+</span><span class="line">
+</span><span class="line"><span class="k">private</span><span class="o">:</span>
+</span><span class="line"><span class="n">boost</span><span class="o">::</span><span class="n">scoped_ptr</span><span class="o">&lt;</span><span class="n">Impl</span><span class="o">&gt;</span> <span class="n">m_impl</span><span class="p">;</span>
+</span><span class="line"><span class="p">};</span>
+</span><span class="line">
+</span><span class="line"><span class="c1">// pimpl.cc</span>
+</span><span class="line"><span class="k">class</span> <span class="nc">Impl</span> <span class="p">{</span>
+</span><span class="line"> <span class="c1">// ...</span>
+</span><span class="line"><span class="p">};</span>
+</span><span class="line">
+</span><span class="line"><span class="n">Pimpl</span><span class="o">::</span><span class="n">Pimpl</span><span class="p">()</span>
+</span><span class="line"><span class="o">:</span> <span class="n">m_impl</span><span class="p">(</span><span class="k">new</span> <span class="n">Impl</span><span class="p">)</span>
+</span><span class="line"><span class="p">{}</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>If you do not declare the destructor the compiler will generate one in
+every translation unit that includes <code>impl.h</code>, which will call
+the destructor of member variables, that is, the destructor
+of <code>m_impl</code> which requires the complete definition
+of <code>Impl</code>. But the whole purpose of Pimpl idiom is to hide the
+definition of <code>Impl</code>. To solve this problem you should declare
+the destructor in the header file to prevent the compiler from generating
+one, and define it in the source file. Then only the <code>impl.cc</code> requires the
+complete definition of <code>Impl</code>. Other translation units just
+call <code>Pimpl</code>’s destructor as an external function, so they don’t
+need to generate it.</p>
+
+<h2 id="prefer-anonymous-namespace-functions-to-class-static-functions">Prefer anonymous namespace functions to class static functions.</h2>
+
+<p>When you are implementing a class’s interface, you may need some helper
+functions which has no relation with the private (member or static)
+data. You can either declare the helper functions as the private static
+functions in the class header file, or as the anonymous namespace functions
+in the class source file.</p>
+
+<p>Since it does not need to access the private data, the helper function
+should be kept out of the class definition to make them loosely
+coupled. And it is the implementation’s details, which we don’t want the
+client of the class see it. So if we can put it outside the header file, we
+should do it. If we put it in the header file, every time the
+implementation changes the client using this class has to be
+re-compiled. So we should put the implementation details outside of the
+class header file as much as possible.</p>
+
+<h2 id="pass-read-only-arguments-by-const-reference-and-read-write-arguments-by-value">Pass read-only arguments by const reference, and read-write arguments by value</h2>
+
+<p>If the argument is intended to be read only in the function body, and</p>
+
+<ol>
+  <li>if its size is bigger than the pointer type pass it by const-reference,</li>
+  <li>otherwise, pass it by value</li>
+</ol>
+
+<p>to avoid unnecessary copy.  That means values of class objec type should be
+passed by const-reference, and values of the small types like the basic
+types should be passed by value.  If the smaller ones were passed by const
+reference another pointer indirection cost would have been incurred in
+addition to the pointer copying cost when reading their values.</p>
+
+<p>If the argument is intended to be modifed in the function body, it is
+recommended to pass it by value instead of passing it by reference and
+making a copy in the function body.</p>
+
+<p>Consider the following code.</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+<span class="line-number">11</span>
+<span class="line-number">12</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span>
+</span><span class="line"><span class="n">sorted</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">names</span><span class="p">)</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line"><span class="n">std</span><span class="o">::</span><span class="n">sort</span><span class="p">(</span><span class="n">names</span><span class="p">);</span>
+</span><span class="line"><span class="k">return</span> <span class="n">names</span><span class="p">;</span>
+</span><span class="line"><span class="p">}</span>
+</span><span class="line">
+</span><span class="line"><span class="c1">// names is an lvalue; a copy is required so we don&#39;t modify names</span>
+</span><span class="line"><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">sorted_names1</span> <span class="o">=</span> <span class="n">sorted</span><span class="p">(</span> <span class="n">names</span> <span class="p">);</span>
+</span><span class="line">
+</span><span class="line"><span class="c1">// get_names() is an rvalue expression; we can omit the copy!</span>
+</span><span class="line"><span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">std</span><span class="o">::</span><span class="n">string</span><span class="o">&gt;</span> <span class="n">sorted_names2</span> <span class="o">=</span> <span class="n">sorted</span><span class="p">(</span> <span class="n">get_names</span><span class="p">()</span> <span class="p">);</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>If the argument passed is an lvalue a copy is required.  But if the
+argument is an rvalue the copy can be optimized out by the compiler.</p>
+
+<p>See <a href="http://cpp-next.com/archive/2009/08/want-speed-pass-by-value/">“Want Speed? Pass by
+Value”</a> for
+more details.</p>
+
+<h2 id="dont-worry-about-returnning-by-value">Don’t worry about returnning by value</h2>
+
+<p>Many modern C++ compilers provide the Return Value Optimization to elide
+the copy when returnning value.</p>
+
+<p>Consider the following code.</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+<span class="line-number">6</span>
+<span class="line-number">7</span>
+<span class="line-number">8</span>
+<span class="line-number">9</span>
+<span class="line-number">10</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">getName</span><span class="p">()</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line"><span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">name</span><span class="p">;</span>
+</span><span class="line">
+</span><span class="line"><span class="c1">// do stuff to `name`</span>
+</span><span class="line">
+</span><span class="line"><span class="k">return</span> <span class="n">name</span><span class="p">;</span>
+</span><span class="line"><span class="p">}</span>
+</span><span class="line">
+</span><span class="line"><span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="n">s</span> <span class="o">=</span> <span class="n">getName</span><span class="p">();</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>Actually the signature of <code>getName()</code> is translated by the compiler to</p>
+<figure class="code"><figcaption><span></span></figcaption><div class="highlight"><table><tr><td class="gutter"><pre class="line-numbers"><span class="line-number">1</span>
+<span class="line-number">2</span>
+<span class="line-number">3</span>
+<span class="line-number">4</span>
+<span class="line-number">5</span>
+</pre></td><td class="code"><pre><code class="c++"><span class="line"><span class="kt">void</span> <span class="nf">getName</span><span class="p">(</span><span class="n">std</span><span class="o">::</span><span class="n">string</span> <span class="o">*</span><span class="n">p</span><span class="p">)</span>
+</span><span class="line"><span class="p">{</span>
+</span><span class="line">    <span class="c1">// do stuff to `*p`</span>
+</span><span class="line">    <span class="c1">// not necessary to copy when returnning</span>
+</span><span class="line"><span class="p">}</span>
+</span></code></pre></td></tr></table></div></figure>
+<p>The caller allocates space for the return value on the stack, and pass the
+address of the space to the callee. Then the callee construct the return
+value directly in that space, which elimiates a copy from inside to
+outside. So we should no worry about the copy cost when returnning a big
+object from a function, and the signature is more satisfactory.</p>
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2013-06-10T00:00:00+08:00'><span class='date'>2013-06-10</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/programming-practice/'>programming practice</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2013/04/13/havard_admonishment/" title="Previous Post: 哈佛训戒">&laquo; 哈佛训戒</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2013/12/24/what-i-learned-in-2013/" title="Next Post: 2013年学到了什么">2013年学到了什么 &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>

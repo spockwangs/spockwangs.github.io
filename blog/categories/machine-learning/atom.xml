@@ -1,0 +1,493 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+
+  <title><![CDATA[Category: Machine Learning | Spockwang's Blog]]></title>
+  <link href="http://spockwangs.github.io/blog/categories/machine-learning/atom.xml" rel="self"/>
+  <link href="http://spockwangs.github.io/"/>
+  <updated>2019-01-09T13:27:54+08:00</updated>
+  <id>http://spockwangs.github.io/</id>
+  <author>
+    <name><![CDATA[spockwang]]></name>
+    
+  </author>
+  <generator uri="http://octopress.org/">Octopress</generator>
+
+  
+  <entry>
+    <title type="html"><![CDATA[Paper Review: Deep Neural Networks for YouTube Recommendations]]></title>
+    <link href="http://spockwangs.github.io/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/"/>
+    <updated>2018-12-22T22:56:26+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations</id>
+    <content type="html"><![CDATA[<p>这篇论文描述了YouTube的一个召回和排序模型，是整个推荐系统的一部分，但是也比较完整，从数据处理、召回
+到排序生成最终的推荐列表都有描述，是学习一个推荐系统的绝佳材料，其中很多细节也很值得学习。
+<!-- more --></p>
+
+<h1 id="section">架构</h1>
+
+<p>推荐系统整体架构如下图所示：
+<img src="/images/youtube_architecture.png"></p>
+
+<p>架构分为两个步骤：从视频库（百万级）中筛选出一小部分用户喜欢的视频（约几百个），称为召回，然后再对这
+些视频打分排序输出最高的几十个，称为排序。召回是初步筛选，目的是大幅减少候选集减少排序的计算量，所用
+的特征较少，模型也相对简单些。排序是精选，由于候选集已减少到几百个，可以使用更复杂的特征和模型。分为
+这两步还有一个好处就是可以与其它召回策略组合。</p>
+
+<h1 id="section-1">召回</h1>
+
+<p>召回的目的就是从数百万个视频中筛选出与用户最相关的几百个视频，所以面临如下两个挑战：</p>
+
+<ul>
+  <li>召回率要足够高</li>
+  <li>计算速度要快</li>
+</ul>
+
+<h2 id="section-2">模型的设计</h2>
+
+<p>召回模型的设计主要受上一代推荐模型矩阵分解和NLP领域词向量模型的启发。矩阵分解模型根据用户对视频的行
+为来表达用户与视频的关系，这样可以对相似的用户推荐相似的视频，是一种协同过滤算法，不需要学习视频的语
+义，难度会小很多，缺点是只能推荐已经有人播放过的视频，无法解决视频的冷启动问题。矩阵分解可以看作是浅
+层的神经网络，模型的迭代是在此基础上可以增加深度和宽度增加模型的表达能力。</p>
+
+<p>召回问题可以看作是一个多分类问题，给定用户$U$和上下文$C$预测观看视频库$V$中某个视频$v_i$的概率:</p>
+
+<script type="math/tex; mode=display">P(i|U,C) = \frac{\exp(v_i^Tu)}{\sum_{j\in V}\exp(v_j^Tu)}</script>
+
+<p>其中$u\in\mathbb{R}^N$(论文中$N=256$)是描述用户和上下文的向量，$v\in\mathbb{R}^N$是描述视频的向量。
+这个模型的目标就是从用户的特征和上下文学习到用户的向量表达用于区分对不同视频的偏好。剩下的问题就是如
+何得到视频向量，要保证视频向量能表达出与用户向量之间的关系。受NLP领域词向量模型的启发我们可以在同一
+个模型中学习视频的向量，这样就可以保证视频向量与用户向量的距离可以描述两者之间的关系。</p>
+
+<p>使用$z_i = v_i^Tu$，则可计算softmax交叉熵的损失函数为：</p>
+
+<script type="math/tex; mode=display">loss = -\sum_{i\in V}y_i\log P(i|U,C)</script>
+
+<p>其中$y_i$表示样本label中的第$i$个分量，只有一个分量是1（对应于正样本），其它分量是0（对应于负样本），所以：</p>
+
+<script type="math/tex; mode=display">% &lt;![CDATA[
+\begin{align}
+loss &= -\log P(t|U,C) & (假设y_t=1，其余分量为0) \\
+&= -\log\frac{\exp(z_t)}{\sum_{i\in V}\exp(z_i)} \\
+&= -z_t + \log\sum_{i\in V}\exp(z_i)
+\end{align} %]]&gt;</script>
+
+<p>对参数求导求其梯度可得：</p>
+
+<script type="math/tex; mode=display">% &lt;![CDATA[
+\begin{align}
+\nabla loss &= -\nabla z_t + \nabla\log\sum_{i\in V}\exp(z_i) \\
+&= -\nabla z_t + \sum_{i\in V}\left(\frac{\exp(z_i)}{\sum_{j\in V}\exp(z_j)}\nabla z_i\right) \\
+&= -\nabla z_t + \sum_{i\in V}P(i|U,C)\nabla z_i
+\end{align} %]]&gt;</script>
+
+<p>上述第二个式子需要对整个视频库求和，计算量非常大，但我们看出它其实是一个概率均值：</p>
+
+<script type="math/tex; mode=display">\mathbb{E}_P[\nabla z_i]</script>
+
+<p>其中$P$表示$P(i|U,C)$. 我们可以采用importance sampling来简化对这个式子的计算。预定义一个采样分布$Q$
+从视频库的一个比较小的子集$V’$（数千个）中采样，我们可以近似计算：</p>
+
+<script type="math/tex; mode=display">% &lt;![CDATA[
+\begin{align}
+\mathbb{E}_P[\nabla z_i] &\approx \sum_{i\in V'}\frac{\exp(z_i)/Q(i)}{\sum_{j\in V'}\exp(z_j)/Q(j)}\nabla z_i
+\end{align} %]]&gt;</script>
+
+<h2 id="section-3">特征工程</h2>
+
+<p>召回主要使用了用户近期行为（最近观看过的视频和搜索串）和人口学特征。近期观看过的视频通过视频向量求平
+均值作为输入。搜索串另外用语言模型训练出词向量然后求平均值输入。人口学特征有助于解决冷启动用户的推荐
+问题。用户的地理位置、设备使用one-hot编码向量作为输入。年龄、性别及登陆态作为连续变量归一化到$[0, 1]$.</p>
+
+<p>用户一般喜欢看新上传的视频，而且视频在不同时间点的点击率也很不一样，所以模型必须能够表达出点击偏好与
+时间之间的关系。因此必须输入一个与时间有关的特征，这个特征能表达出过去观看行为与未来预测之间的时间差。
+论文中是以当前训练时间为基点计算样本的年龄（即训练时间减去样本时间），预测时输入即将预测的样本的年龄
+（预测时间减去训练时间，为0或一个较小的负数）。</p>
+
+<h2 id="section-4">训练和评估</h2>
+
+<p>推荐系统解决的往往是一个代理问题而不是真实的目标问题（推荐的目标是找到让用户满意的视频，但是用户的满
+意度是无法衡量的，所以召回模型退而求其次去优化点击率）。代理问题的存在会极大影响线上AB测试的性能，但
+是离线评估时很难衡量。所以特征和样本的选择需要仔细权衡，不能导致过于拟合代理问题反而恶化真实目标。</p>
+
+<p>训练的样本不仅仅包括推荐系统的结果，还包括其它路径的观看结果。这样是为了避免推荐系统的偏见，无法推出
+新的内容。如果用户从其它途径观看了视频，我们也希望可以通过协同过滤学习到这个行为把视频推荐给其它用户。
+为了防止过拟合代理问题，有时候还需要对模型隐瞒一些信息。比如用户搜索一个查询串后会出现跟这个查询串相
+关的视频，如果把这个当成样本给模型学习会导致预测的下一个观看视频就是上次搜索过的视频，这个并不是用户
+想要的。构造样本时把查询串的顺序信息丢掉可以避免这个问题。</p>
+
+<p>用户观看视频通常会表现出非对称行为。比如观看系列视频往往从第一集开始看起，而不是反过来。为了让模型学
+习到这种规律，构造样本时也要保留这个顺序，而不是用未来的观看行为来预测过去的行为。</p>
+
+<p>模型的网络结构像一个塔一样，第一层最宽，而后逐渐变窄，最后一层最窄。先从最简单的2层（包括输出层）开
+始训练，逐渐增加深度和宽度，直到收益递减而收敛变慢为止。最终的网络结构如下所示：</p>
+
+<p><img src="/images/youtube_recall_network.png"></p>
+
+<h1 id="section-5">排序</h1>
+
+<p>排序的目标是根据曝光预测观看视频的时长，使用时长而不是点击率更加符合业务目标。排序模型可以使用更多的
+特征，因为候选的视频只有数百个。</p>
+
+<p>输入特征主要分为两类：分类特征和连续特征。分类特征转化为一个稠密的向量表示，每个独立的特征空间都有自
+己的向量空间，向量的纬度正比于特征空间的秩。如果特征空间的秩很大（比如视频和搜索串），则按点击频率取
+最高的一部分，其余特征的向量取0. 多个分类特征的向量表达取其平均值。神经网络对连续特征的分布和取值范
+围很敏感，所以需要归一化。连续特征都在训练之前根据其分布均匀归一化到$[0, 1]$（所谓均匀归一化是指归一化
+后的每个取值的频率都相等）。另外，连续特征在归一化后还会取起平方和平方根以学习非线性规律。</p>
+
+<p>为了预测观看视频的时长，模型的目标是加权的逻辑回归，即在计算逻辑回归的交叉熵损失函数时，正样本用观看
+时长加权，而负样本使用1加权，则其损失函数为：</p>
+
+<script type="math/tex; mode=display">% &lt;![CDATA[
+loss=
+\begin{cases}
+-T_i \log \sigma(z) & \text{正样本，其中T_i表示观看时长} \\
+-\log(1-\sigma(z)) & \text{负样本}
+\end{cases} %]]&gt;</script>
+
+<p>相当于一个正样本重复了$T_i$次，于是逻辑回归模型学习到的odds是：</p>
+
+<script type="math/tex; mode=display">% &lt;![CDATA[
+\begin{align}
+\exp(z) &= \frac{\sum{T_i}}{N-k} \\
+&= \mathbb{E}[T](1+\frac{k}{N-k}) \\
+&\approx\mathbb{E}[T] & (假设k很小)
+\end{align} %]]&gt;</script>
+
+<p>所以预测时采用$\exp$作为最后一层的激活函数。</p>
+
+<p>迭代模型时于召回模型一样，逐步增加深度和宽度并观察线上测试效果，同时要兼顾模型预测耗时。</p>
+
+<p><img src="/images/youtube_rank_network.png"></p>
+
+<h1 id="conclusions">Conclusions</h1>
+
+<p>论文中的模型虽然没有特别的创新之处，但是很多工程细节包括学习目标的设计、特征和样本的选择、模型的迭代
+设计等却非常值得我们学习。</p>
+]]></content>
+  </entry>
+  
+  <entry>
+    <title type="html"><![CDATA[编译独立的Tensorflow Serving库]]></title>
+    <link href="http://spockwangs.github.io/blog/2018/02/06/build-independent-tensorflow-serving-library/"/>
+    <updated>2018-02-06T15:51:48+08:00</updated>
+    <id>http://spockwangs.github.io/blog/2018/02/06/build-independent-tensorflow-serving-library</id>
+    <content type="html"><![CDATA[<p>Tensorflow Serving的<a href="https://www.tensorflow.org/serving/setup?hl=zh-cn">官方文档</a>仅支持编译集成gRPC的模型预测服务，不方便开发者集成自己的框架中。本文将介绍一种方法编译独立的静态Tensorflow Serving库，开发者可直接调用Serving的API进行模型预测，方便集成至自己的服务中。
+<!--more--></p>
+
+<h2 id="section">准备编译环境</h2>
+
+<ol>
+  <li>安装Bazel</li>
+  <li>安装Python 2.7</li>
+</ol>
+
+<h2 id="tensorflow-serving">编译Tensorflow Serving</h2>
+
+<h3 id="tensorflow-serving-1">下载Tensorflow Serving源代码</h3>
+<p><code>
+$ git clone --recurse-submodules https://github.com/tensorflow/serving
+</code></p>
+
+<p>注意<code>--recurse-submodules</code>是为了下载子模块<code>tensorflow</code>和<code>tf_models</code>.
+以下命令都在源代码根目录下执行。</p>
+
+<h3 id="gpu">支持GPU</h3>
+
+<p>不需要支持GPU可跳过该步骤。</p>
+
+<p>支持GPU需要安装CUDA，而这需要一些先决条件，可参考<a href="http://docs.nvidia.com/cuda/cuda-installation-guide-linux/#axzz4RD7GVh1d">官方手册</a>.</p>
+
+<p>安装完后记录以下信息，配置Tensorflow时会用到：</p>
+
+<ul>
+  <li>CUDA的安装目录，一般是<code>/usr/local/cuda</code></li>
+  <li>CUDA的版本，查看文件<code>/usr/local/cuda/version.txt</code></li>
+  <li>cuDNN的版本
+<code>
+cat /usr/local/cuda/include/cudnn.h | grep CUDNN_MAJOR -A 2
+</code></li>
+</ul>
+
+<h3 id="tensorflow">配置Tensorflow</h3>
+
+<p><code>
+$ cd tensorflow
+$ ./configure
+$ cd ..
+</code>
+可参考https://www.tensorflow.org/install/install_sources?hl=zh-cn#configure_the_installation</p>
+
+<h3 id="tensorflow-serving-2">编译Tensorflow Serving</h3>
+
+<p><code>
+$ bazel clean
+$ bazel build -c opt --incompatible_load_argument_is_label=false \
+    --cxxopt=-march=native --copt=-march=native \
+    //tensorflow_serving/model_servers:tensorflow_model_server
+</code>
+选项<code>--incompatible_load_argument_is_label=false</code>是为了兼容bazel 0.9版的问题。</p>
+
+<h3 id="section-1">打包编译时生成的中间对象文件生成静态库</h3>
+
+<p><code>
+$ find -L bazel-out/k8-opt/ -name '*.o' | grep -v '/main\.o$\|\.grpc\.pb\.o$\|/curl/\|/grpc/\|/cloud/\|/hadoop/' | xargs -i ar qv libtensorflow_serving.a '{}'
+</code>
+注意：</p>
+
+<ul>
+  <li>要把上一步编译生成部分不需要的对象文件剔除掉。
+    <ul>
+      <li>main函数</li>
+      <li>curl, grpc, cloud, hadoop等不需要的模块</li>
+      <li>编译环境中已经有的模块（比如ssl, protobuf, snappy等）也可以剔除掉，减小库的尺寸</li>
+    </ul>
+  </li>
+  <li>ar是用选项<code>q</code>来添加对象文件，因为可能会有重名的对象文件。</li>
+</ul>
+
+<h2 id="section-2">训练并导出模型</h2>
+
+<p>以MNIST softmax模型为例，训练模型并导出到目录<code>models</code>.</p>
+
+<p><code>
+$ python2 serving/tensorflow_serving/example/mnist_saved_model.py models
+</code></p>
+
+<h2 id="section-3">编写示例代码加载模型进行预测</h2>
+
+<p>``` c++
+#include <iostream>
+#include <fstream>
+#include &lt;arpa/inet.h&gt;
+#include "tensorflow_serving/core/availability_preserving_policy.h"
+#include "tensorflow_serving/model_servers/platform_config_util.h"
+#include "tensorflow_serving/model_servers/server_core.h"
+#include "tensorflow_serving/servables/tensorflow/predict_impl.h"</fstream></iostream></p>
+
+<p>using namespace std;
+using namespace tensorflow::serving;</p>
+
+<p>class DataSet {
+public:
+    DataSet()
+    {}</p>
+
+<pre><code>void LoadDataFromDir(const std::string&amp; path)
+{
+    const char* x_train_file = "train-images-idx3-ubyte";
+    const char* y_train_file = "train-labels-idx1-ubyte";
+    const char* x_test_file = "t10k-images-idx3-ubyte";
+    const char* y_test_file = "t10k-labels-idx1-ubyte";
+    m_x_train = ExtractImages(path + "/" + x_train_file);
+    m_y_train = ExtractLabels(path + "/" + y_train_file);
+    m_x_test = ExtractImages(path + "/" + x_test_file);
+    m_y_test = ExtractLabels(path + "/" + y_test_file);
+}
+    
+vector&lt;double&gt;&amp; x_train()
+{
+    return m_x_train;
+}
+
+vector&lt;int&gt;&amp; y_train()
+{
+    return m_y_train;
+}
+
+vector&lt;double&gt;&amp; x_test()
+{
+    return m_x_test;
+}
+
+vector&lt;int&gt;&amp; y_test()
+{
+    return m_y_test;
+}
+</code></pre>
+
+<p>private:
+    uint32_t ReadUint32(ifstream&amp; is)
+    {
+        uint32_t data = 0;
+        auto read_count = is.readsome(reinterpret_cast&lt;char*&gt;(&amp;data), 4);
+        if (read_count != 4) {
+            throw logic_error(“can’t read 4 bytes”);
+        }
+        return ntohl(data);
+    }</p>
+
+<pre><code>uint8_t ReadUint8(ifstream&amp; is)
+{
+    uint8_t data = 0;
+    auto read_count = is.readsome(reinterpret_cast&lt;char*&gt;(&amp;data), 1);
+    if (read_count != 1) {
+        throw logic_error("can't read 1 byte");
+    }
+    return data;
+}
+
+vector&lt;double&gt; ExtractImages(const string&amp; file)
+{
+    ifstream is(file);
+    if (!is) {
+        throw logic_error("can't open file: " + file);
+    }
+    uint32_t magic = ReadUint32(is);
+    if (magic != 2051) {
+        throw logic_error("bad magic: " + to_string(magic));
+    }
+    uint32_t num = ReadUint32(is);
+    uint32_t rows = ReadUint32(is);
+    uint32_t cols = ReadUint32(is);
+    vector&lt;double&gt; images;
+    for (size_t i = 0; i &lt; num*rows*cols; ++i) {
+        uint8_t byte = ReadUint8(is);
+        images.push_back(static_cast&lt;double&gt;(byte)/255.0);
+    }
+    return images;
+}
+
+vector&lt;int&gt; ExtractLabels(const string&amp; file)
+{
+    ifstream is(file);
+    if (!is) {
+        throw logic_error("can't open file: " + file);
+    }
+    uint32_t magic = ReadUint32(is);
+    if (magic != 2049) {
+        throw logic_error("bad magic: " + to_string(magic));
+    }
+    uint32_t num = ReadUint32(is);
+    vector&lt;int&gt; labels;
+    for (size_t i = 0; i &lt; num; ++i) {
+        uint8_t byte = ReadUint8(is);
+        labels.push_back(byte);
+    }
+    return labels;
+}
+
+std::vector&lt;double&gt; m_x_train;
+std::vector&lt;int&gt; m_y_train;
+std::vector&lt;double&gt; m_x_test;
+std::vector&lt;int&gt; m_y_test; };
+</code></pre>
+
+<p>int GetPredictValue(const PredictResponse&amp; resp)
+{
+    int predicted = 0;
+    for (const auto&amp; p : resp.outputs()) {
+        if (p.first == “scores”) {
+            float max = 0;
+            for (size_t j = 0; j &lt; p.second.float_val_size(); ++j) {
+                if (p.second.float_val(j) &gt; max) {
+                    max = p.second.float_val(j);
+                    predicted = j;
+                }
+            }
+        }
+    }
+    return predicted;
+}</p>
+
+<p>int main()
+{
+    // 加载测试数据。
+    DataSet data_set;
+    data_set.LoadDataFromDir(“mnist_data”);</p>
+
+<pre><code>// 设置Serving选项。
+ServerCore::Options options;
+auto config = options.model_server_config.mutable_model_config_list()-&gt;add_config();
+// 设置模型名称，请求模型预测时必须与此一致，见下面。
+config-&gt;set_name("mnist");
+// 设置模型的路径。注意：必须是绝对路径。
+config-&gt;set_base_path("/home/qspace/data/spockwang/models");
+// 设置模型平台。对Tensorflow训练的模型来讲必须是"tensorflow".
+config-&gt;set_model_platform("tensorflow");
+
+options.aspired_version_policy = std::unique_ptr&lt;AspiredVersionPolicy&gt;(new AvailabilityPreservingPolicy);
+
+// 运行平台配置。
+SessionBundleConfig session_bundle_config;
+session_bundle_config.mutable_session_config()-&gt;set_intra_op_parallelism_threads(1);
+session_bundle_config.mutable_session_config()-&gt;set_inter_op_parallelism_threads(0);
+options.platform_config_map = CreateTensorFlowPlatformConfigMap(session_bundle_config, true);
+
+std::unique_ptr&lt;ServerCore&gt; core;
+auto status = ServerCore::Create(std::move(options), &amp;core);
+if (!status.ok()) {
+    cerr &lt;&lt; "error: " &lt;&lt; status.ToString() &lt;&lt; endl;
+    return 1;
+}
+std::unique_ptr&lt;TensorflowPredictor&gt; predictor(new TensorflowPredictor(true));
+
+// 遍历测试数据进行预测，然后计算预测精度。
+int total_cnt = 0;
+int success_cnt = 0;
+int n = data_set.x_test().size()/784;
+for (int i = 0; i &lt; n; ++i) {
+    cout &lt;&lt; "#" &lt;&lt; i &lt;&lt; "/" &lt;&lt; n &lt;&lt; endl;
+    vector&lt;double&gt; x = vector&lt;double&gt;(data_set.x_test().begin()+784*i,
+                                      data_set.x_test().begin()+784*(i+1));
+    int y = data_set.y_test()[i];
+
+    PredictRequest req;
+    auto model_spec = req.mutable_model_spec();
+    // 与加载模型时设置的名字保持一致，见上面。
+    model_spec-&gt;set_name("mnist");
+    // 与保存模型时设置的签名保持一致，见mnist_saved_model.py
+    model_spec-&gt;set_signature_name("predict_images");
+
+    // 构造输入特征。
+    auto inputs = req.mutable_inputs();
+    auto&amp; tensor = (*inputs)["images"];
+    tensor.set_dtype(tensorflow::DataType::DT_FLOAT);
+    for (auto i : x) {
+        tensor.add_float_val(i);
+    }
+    tensor.mutable_tensor_shape()-&gt;add_dim()-&gt;set_size(1);
+    tensor.mutable_tensor_shape()-&gt;add_dim()-&gt;set_size(x.size());
+    
+    // 计算预测输出。
+    PredictResponse resp;
+    auto status = predictor-&gt;Predict(tensorflow::RunOptions(), core.get(), req, &amp;resp);
+    if (!status.ok()) {
+        cerr &lt;&lt; status.ToString() &lt;&lt; endl;
+        return 1;
+    }
+    ++total_cnt;
+    int predicted = GetPredictValue(resp);
+    if (y == predicted) {
+        ++success_cnt;
+    }
+}
+
+double accuracy = static_cast&lt;double&gt;(success_cnt)/total_cnt;
+cout &lt;&lt; "Accuracy: " &lt;&lt; accuracy &lt;&lt; endl;
+return 0; } ```
+</code></pre>
+
+<p>编译代码：
+<code>
+$ g++ -o mnist_serving mnist_serving.cpp -Wl,-whole-archive libtensorflow_serving.a -Wl,-no-whole-archive -I serving -I serving/tensorflow -I serving/bazel-out/k8-opt/genfiles/external/org_tensorflow/ -I serving/bazel-serving/external/nsync/public/ -I serving/bazel-serving/external/protobuf_archive/src/ -I serving/bazel-out/k8-opt/genfiles/ -std=c++11 -ldl -lpthread
+</code>
+注意：由于Tensorflow采用注册机制来实现反射，所以必须使用链接选项<code>-whole-archive</code>强制链接整个静态库。</p>
+
+<p>下载MNIST数据到目录<code>mnist_data</code>并解压，然后运行查看预测结果。
+<code>
+$ ls mnist_data
+t10k-images-idx3-ubyte  t10k-labels-idx1-ubyte  train-images-idx3-ubyte  train-labels-idx1-ubyte
+$ ./mnist_serving
+...
+Accuracy: 0.9092
+2018-02-07 11:49:34.222079: I tensorflow_serving/core/basic_manager.cc:253] Unload all remaining servables in the manager.
+2018-02-07 11:49:34.222122: I tensorflow_serving/core/loader_harness.cc:137] Quiescing servable version {name: mnist version: 1}
+2018-02-07 11:49:34.222135: I tensorflow_serving/core/loader_harness.cc:144] Done quiescing servable version {name: mnist version: 1}
+2018-02-07 11:49:34.222147: I tensorflow_serving/core/loader_harness.cc:119] Unloading servable version {name: mnist version: 1}
+2018-02-07 11:49:34.223047: I ./tensorflow_serving/core/simple_loader.h:294] Calling MallocExtension_ReleaseToSystem() after servable unload with 61522
+2018-02-07 11:49:34.223068: I tensorflow_serving/core/loader_harness.cc:127] Done unloading servable version {name: mnist version: 1}
+</code></p>
+
+]]></content>
+  </entry>
+  
+</feed>

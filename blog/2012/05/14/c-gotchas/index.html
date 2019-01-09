@@ -1,0 +1,398 @@
+
+<!DOCTYPE html>
+<!--[if IEMobile 7 ]><html class="no-js iem7"><![endif]-->
+<!--[if lt IE 9]><html class="no-js lte-ie8"><![endif]-->
+<!--[if (gt IE 8)|(gt IEMobile 7)|!(IEMobile)|!(IE)]><!--><html class="no-js" lang="en"><!--<![endif]-->
+<head>
+  <meta charset="utf-8">
+  <title>C++ Gotchas - Spockwang's Blog</title>
+  <meta name="author" content="spockwang">
+
+  
+  <meta name="description" content="Variables, Operators and Conversions Implicit conversions are not applied to non-const reference arguments. See p.146 of [C++]. The distinction &hellip;">
+  
+
+  <!-- http://t.co/dKP3o1e -->
+  <meta name="HandheldFriendly" content="True">
+  <meta name="MobileOptimized" content="320">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  
+  <link rel="canonical" href="http://spockwangs.github.io/blog/2012/05/14/c-gotchas/">
+  <link href="/favicon.png" rel="icon">
+  <link href="/stylesheets/screen.css" media="screen, projection" rel="stylesheet" type="text/css">
+  <link href="/atom.xml" rel="alternate" title="Spockwang's Blog" type="application/atom+xml">
+  <script src="/javascripts/modernizr-2.0.js"></script>
+  <script
+      src="https://code.jquery.com/jquery-1.12.4.min.js"
+      integrity="sha256-ZosEbRLbNQzLpnKIkEdrPv7lOy9C27hHQ+Xp8a4MxAQ="
+      crossorigin="anonymous"></script>
+  <!-- <script src="//ajax.googleapis.com/ajax/libs/jquery/1.9.1/jquery.min.js"></script> -->
+  <script>!window.jQuery && document.write(unescape('%3Cscript src="/javascripts/libs/jquery.min.js"%3E%3C/script%3E'))</script>
+  <script src="/javascripts/octopress.js" type="text/javascript"></script>
+  <!--Fonts from Google"s Web font directory at http://google.com/webfonts -->
+<link href="//fonts.googleapis.com/css?family=PT+Serif:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<link href="//fonts.googleapis.com/css?family=PT+Sans:regular,italic,bold,bolditalic" rel="stylesheet" type="text/css">
+<!-- MathJax Configuration -->
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+         processEscapes: true
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Config({
+     tex2jax: {
+         skipTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code']
+     }
+ });
+</script>
+
+<script type="text/x-mathjax-config">
+ MathJax.Hub.Queue(function() {
+     var all = MathJax.Hub.getAllJax(), i;
+     for(i=0; i < all.length; i += 1) {
+         all[i].SourceElement().parentNode.className += ' has-jax';
+     }
+ });
+</script>
+
+<script type="text/javascript"
+        src="//cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+</script>
+
+  
+
+</head>
+
+<body   >
+  <header role="banner"><hgroup>
+  <h1><a href="/">Spockwang's Blog</a></h1>
+  
+</hgroup>
+
+</header>
+  <nav role="navigation"><ul class="subscription" data-subscription="rss">
+  <li><a href="/atom.xml" rel="subscribe-rss" title="subscribe via RSS">RSS</a></li>
+  
+</ul>
+  
+<form action="https://www.google.com/search" method="get">
+  <fieldset role="search">
+    <input type="hidden" name="sitesearch" value="spockwangs.github.io">
+    <input class="search" type="text" name="q" results="0" placeholder="Search"/>
+  </fieldset>
+</form>
+  
+<ul class="main-navigation">
+  <li><a href="/">Blog</a></li>
+  <li><a href="/blog/archives">Archives</a></li>
+</ul>
+
+</nav>
+  <div id="main">
+    <div id="content">
+      <div>
+<article class="hentry" role="article">
+  
+  <header>
+    
+      <h1 class="entry-title">C++ Gotchas</h1>
+    
+    
+      <p class="meta">
+        
+
+
+
+
+<time class='entry-date' datetime='2012-05-14T00:00:00+08:00'><span class='date'>2012-05-14</span> <span class='time'>12:00 am</span></time>
+        
+        
+        
+        | <a href="#youyan_comments">评论</a>
+        
+      </p>
+    
+  </header>
+
+
+<div class="entry-content"><h2 id="variables-operators-and-conversions">Variables, Operators and Conversions</h2>
+
+<p>Implicit conversions are not applied to non-const reference arguments.  See p.146 of [C++].</p>
+
+<p>The distinction between const-reference and non-const reference parameters
+is that the former matches constants and const variables while the latter
+matches others in overloading resolution.  Const-reference can bind
+temporary objects but non-const reference can not.</p>
+
+<p>Not like C, consts have internal linkage by default.  However, you can use
+extern to give it external linkage.  See bottom of p.199 of [C++].</p>
+
+<p>There are four kinds of cast in C++: static_cast, dynamic_cast, const_cast, and reinterpret_cast.
+<!--more--></p>
+
+<h3 id="initialization">Initialization</h3>
+
+<p>The global objects and class static member objects are constructed
+according to their order of definition (section 9.4.1 of [C++]).  The local
+static objects are constructed when accessed the first time (See section
+7.1.2 of [C++]).  They are destructed in the reverse order.  An array of
+class objects are initialized by calling corresponding constructors for
+each of its elements, following the subscript order (clause 3 of 12.6 of
+[ISO C++ 1998]).</p>
+
+<p>The objects with static storage duration is first zero-initialized (Section
+8.5 of [ISO C++ 1998]) and then initialized by calling appropriate
+constructors.  Local non-static objects which are class type are
+initialized by calling appropriate constructors (call default constructors
+if no initializers).  Local non-static objects which are built-in types
+have indeterminate initial values.  On initialization of non local objects
+see 3.6.2 of [ISO C++ 1998].  On initialization of static objects see
+clause 4 of section 6.7 of [ISO C++ 1998].</p>
+
+<h3 id="program-termination">Program Termination</h3>
+
+<ul>
+  <li>By exit(): destructors for local objects are not called; destructors for constructed static objects are called.</li>
+  <li>By abort(): all destructors are not called.</li>
+  <li>By throwing an uncaught exception: all destructors are not called.</li>
+  <li>By returning from main(): all destructors are called.</li>
+  <li>See p.218 of [C++].</li>
+</ul>
+
+<h3 id="operator-overloading">Operator Overloading</h3>
+
+<p>Overloaded operator functions must either be a member or take at least one
+argument of a user-defined type.  See 11.2.3 of [C++].</p>
+
+<h3 id="stdendl-vs-n">std::endl vs. “\n”</h3>
+
+<p><code>std::endl</code> causes the stdout stream to be flushed while <code>\n</code> does not.</p>
+
+<h3 id="pass-overloaded-function-as-an-template-parameter">Pass overloaded function as an template parameter</h3>
+
+<p>Be wary when passing overloaded functions as template parameter.  Because
+the passed function is not given any argument the compiler does not know
+which version of the overloaded function to call.  So you must explicitly
+supply template parameters with the function.</p>
+
+<h2 id="class">Class</h2>
+
+<p>A friend function should either be explicitly declared in an enclosing
+scope or take an argument of its class.  If not, the friend cannot be
+called.  See p.280 of [C++].</p>
+
+<p>A function member of a derived class is not in the same scope as a function
+member of the same name in a base class.  See section 13.2 of [ISO C++
+1998].  So the function of a derived class can not overload the function of
+the same name in the base class, because overloading can only happen among
+the same names in the same scope.</p>
+
+<p>The scope of typedef types in class declaration begins from where it is
+defined to the end of class declaration, while the scope of class member
+variables and functions extend to the whole range of the class declaration.</p>
+
+<p>If a function does not catch an exception destructors of local objects of
+that function will not be called.  (See section 9.4.1.1 of [C++].)</p>
+
+<p>A function in derived class with more restricted access right can override
+the same function in the base class.  For example, a private function in a
+derived class can override the same public function in the base class.
+Then I can access the private function in the derived class through virtual
+mechanism.  I think it is a loophole in the C++ grammar.  It is not allowed
+in Java.</p>
+
+<p>Constructors can not be virtual but destructors can be virtual, and
+sometimes it must be.  Calling virtual functions in constructors and
+destructors have the same effect as calling non-virtual functions.  The
+usual virtual mechanism does not make effects, because the virtual pointer
+is pointing to the virtual function table of this class, not the class of
+the actual object.</p>
+
+<p>Unlike Java, you cannot define static class within another class.</p>
+
+<p>The class defined in another class is not special in C++.  The member
+functions of embedded classes can access all fields (regardless of access
+rights) of the enclosing class.  The enclosing class has not any special
+access rights to the inner class.  It is not allowed to access the private
+or protected members of the inner class.</p>
+
+<p>In the absence of an access-specifier for a base class, public is assumed
+when the derived class is declared <code>struct</code> and private is
+assumed when the class is declared <code>class</code>.</p>
+
+<pre><code>class B { ... };
+class D1 : B { ... }; 	// B private by default
+struct D2 : B { ... };	// B public by default
+</code></pre>
+
+<p>Static variables declared in a function member of a class, like static
+variable member, is shared by all objects of this class.</p>
+
+<h3 id="assignment-operator">Assignment operator</h3>
+
+<ul>
+  <li>Obliterate existing object;</li>
+  <li>Check for self-assignment;</li>
+</ul>
+
+<p>Assign to all data members, including those from base classes (by calling
+assignment operators of base classes)</p>
+
+<h3 id="constructor">Constructor</h3>
+
+<p>The constructor of a class must specify a mem-initializer for all its
+virtual base classes (direct or indirect) and direct base classes if they
+do not have an accessible default constructor (clause 6 of 12.6.2 of [ISO
+C++ 1998]).</p>
+
+<h2 id="references">References</h2>
+
+<ul>
+  <li>[C++] The C++ Programming Language, Third Edition.</li>
+  <li>[ISO C++ 1998] The C++ Standard, 1998.</li>
+</ul>
+
+</div>
+
+
+  <footer>
+    <p class="meta">
+      
+  
+
+<span class="byline author vcard">Posted by <span class="fn">spockwang</span></span>
+
+      
+
+
+
+
+<time class='entry-date' datetime='2012-05-14T00:00:00+08:00'><span class='date'>2012-05-14</span> <span class='time'>12:00 am</span></time>
+      
+
+<span class="categories">
+  
+    <a class='category' href='/blog/categories/programming-language/'>programming language</a>
+  
+</span>
+
+
+    </p>
+    
+      <div class="sharing">
+  
+  
+  
+</div>
+
+    
+    <p class="meta">
+      
+        <a class="basic-alignment left" href="/blog/2012/05/13/java-gotchas-2/" title="Previous Post: Java Gotchas">&laquo; Java Gotchas</a>
+      
+      
+        <a class="basic-alignment right" href="/blog/2012/05/14/gnu-tool-chain/" title="Next Post: GNU Tool Chain">GNU Tool Chain &raquo;</a>
+      
+    </p>
+  </footer>
+</article>
+
+
+
+  <section>
+    <h1>Comments</h1>
+    <div id="youyan_comments" aria-live="polite"><!-- UY BEGIN -->
+<div id="uyan_frame"></div>
+<script type="text/javascript" src="//v2.uyan.cc/code/uyan.js"></script>
+<!-- UY END -->
+</div>
+  </section>
+
+</div>
+
+<aside class="sidebar">
+  
+    <section>
+  <h1>Recent Posts</h1>
+  <ul id="recent_posts">
+    
+      <li class="post">
+        <a href="/blog/2019/01/08/paper-review-cops/">Paper Review: Don’t Settle for Eventual: Scalable Causal Consistency for Wide-Area Storage With COPS</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/12/22/paper-review-deep-neural-networks-for-youtube-recommendations/">Paper Review: Deep Neural Networks for YouTube Recommendations</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/08/20/paper-review-google-dapper/">Paper Review: Google Dapper</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/02/06/build-independent-tensorflow-serving-library/">编译独立的Tensorflow Serving库</a>
+      </li>
+    
+      <li class="post">
+        <a href="/blog/2018/01/13/train-using-tensorflow-c-plus-plus-api/">用Tensorflow C++ API训练模型</a>
+      </li>
+    
+  </ul>
+</section>
+<section>
+  <h1>Categories</h1>
+  <ul id="categories">
+    <li class='category'><a href='/blog/categories/administration/'>administration (2)</a></li>
+<li class='category'><a href='/blog/categories/algorithm/'>algorithm (1)</a></li>
+<li class='category'><a href='/blog/categories/computer-network/'>computer network (3)</a></li>
+<li class='category'><a href='/blog/categories/computer-system/'>computer system (6)</a></li>
+<li class='category'><a href='/blog/categories/concurrent-programming/'>concurrent programming (1)</a></li>
+<li class='category'><a href='/blog/categories/database/'>database (3)</a></li>
+<li class='category'><a href='/blog/categories/distributed-system/'>distributed system (5)</a></li>
+<li class='category'><a href='/blog/categories/machine-learning/'>machine learning (2)</a></li>
+<li class='category'><a href='/blog/categories/mysql/'>mysql (1)</a></li>
+<li class='category'><a href='/blog/categories/operating-system/'>operating system (4)</a></li>
+<li class='category'><a href='/blog/categories/programming-language/'>programming language (12)</a></li>
+<li class='category'><a href='/blog/categories/programming-practice/'>programming practice (9)</a></li>
+<li class='category'><a href='/blog/categories/quote/'>quote (2)</a></li>
+<li class='category'><a href='/blog/categories/self-help/'>self-help (1)</a></li>
+<li class='category'><a href='/blog/categories/tensorflow/'>tensorflow (1)</a></li>
+<li class='category'><a href='/blog/categories/web-programming/'>web programming (1)</a></li>
+
+  </ul>
+</section>
+
+
+
+
+
+  
+</aside>
+
+
+    </div>
+  </div>
+  <footer role="contentinfo"><p>
+  Copyright &copy; 2019 - spockwang -
+  <span class="credit">Powered by <a href="http://octopress.org">Octopress</a></span>
+</p>
+
+</footer>
+  
+
+
+
+
+
+
+
+
+
+
+
+</body>
+</html>
